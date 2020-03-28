@@ -36,8 +36,9 @@
 
 // Debugging constants
 #define DEBUG         true  // Output debug messages to Serial Monitor
+#define DEBUG_GPS     false // Echo NMEA sentences to Serial Monitor
 #define DIAGNOSTICS   true  // Output Iridium diagnostic messages to Serial Monitor
-#define DEPLOY        false  // Disable debugging messages for deployment
+#define DEPLOY        false // Disable debugging messages for deployment
 
 // Create a new Serial/UART instance, assigning it to pins 10 and 11
 // For more information see: https://www.arduino.cc/en/Tutorial/SamdSercom
@@ -57,11 +58,12 @@ LSM303      imu; // I2C Address: 0x1E (Magnetometer), 0x6B (Accelerometer)
 TinyGPSPlus gps;
 
 // User defined global variable declarations
-unsigned long alarmInterval           = 300;    // RTC sleep duration in seconds (Default: 3600 seconds)
-unsigned int  sampleInterval          = 5;      // Sampling duration of current tilt measurements (seconds)
-byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (seconds)
-byte          transmitInterval        = 4;      // Number of messages in each Iridium transmission (340-byte limit)
+unsigned long alarmInterval           = 300;    // Alarm sleep duration (Default: 1800 seconds)
+unsigned int  sampleInterval          = 5;      // Sampling duration of current tilt measurements (Default: 120 seconds)
+byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
+byte          transmitInterval        = 4;      // Number of messages sent in each Iridium transmission (340-byte limit)
 byte          maxRetransmitCounter    = 1;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
+byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
 // Global variable and constant declarations
 bool          ledState                = LOW;    // Flag to toggle LED in blinkLed() function
@@ -109,7 +111,7 @@ typedef union {
     unsigned int  voltage;            // Battery voltage (mV)           (2 bytes)
     unsigned int  transmitDuration;   // Previous transmission duration (2 bytes)
     unsigned int  messageCounter;     // Message counter                (2 bytes)
-  } __attribute__((packed));                                            // Total: 59 bytes
+  } __attribute__((packed));                                            // Total: 39 bytes
   byte bytes[39]; // To do: Look into flexible arrays in structures
 } SBDMESSAGE;
 
@@ -126,9 +128,10 @@ void setup() {
   digitalWrite(GPS_EN_PIN, HIGH);
   digitalWrite(LED_BUILTIN, LOW);
 
+  // Start Serial at 115200 baud
   Serial.begin(115200);
-  //while (!Serial); // Prevent execution of script until Serial Monitor is open
-  delay(5000);         // Delay to allow for opening of Serial Monitor
+  //while (!Serial); // Wait for user to open Serial Monitor
+  delay(5000); // Delay to allow user to open Serial Monitor
 
   // Configure Watchdog Timer
   configureWatchdog();
@@ -186,7 +189,7 @@ void setup() {
   }
 
   // Print current date and time
-  Serial.print(F("Datetime: ")); printDatetime();
+  Serial.print(F("Datetime: ")); printDateTime();
 
   // Print operating mode
   Serial.print(F("Mode: "));
@@ -219,25 +222,12 @@ void loop() {
     readBattery();
 
     // Print date and time
-    Serial.print("Alarm trigger: "); printDatetime();
-
-    /*
-      // Perform measurements for 2 minutes
-      unsigned long loopStartTime = millis();
-      while (millis() - loopStartTime < sampleInterval * 1000UL) {
-        petDog();         // Pet the Watchdog Timer
-        readImu();        // Read IMU
-        blinkLed(1, 100); // Blink LED
-        //LowPower.sleep(1000); // Go to sleep to reduce current draw
-      }
-
-    */
+    Serial.print("Alarm trigger: "); printDateTime();
 
     // Perform current measurements
-    digitalWrite(LED_BUILTIN, HIGH);
     for (int i = 0; i < sampleInterval; i++) {
-      petDog();         // Pet the Watchdog Timer
-      readImu();        // Read IMU
+      petDog(); // Pet the Watchdog Timer
+      readImu(); // Read IMU
 #if DEBUG
       blinkLed(1, 100);
 #else if DEPLOY
@@ -247,7 +237,6 @@ void loop() {
       LowPower.sleep(500);
 #endif
     }
-    digitalWrite(LED_BUILTIN, LOW);
 
     // Read GPS
     readGps();
@@ -265,7 +254,7 @@ void loop() {
       transmitCounter = 0;  // Reset transmit counter
     }
 
-    // Set RTC alarm
+    // Set the RTC alarm
     alarmTime = unixtime + alarmInterval; // Calculate next alarm
 
     // Check if alarm was set in the past
@@ -305,7 +294,7 @@ void readBattery() {
   float voltage = 0.0;
 
   // Average measurements
-  for (byte i = 0; i < 10; ++i) {
+  for (int i = 0; i < 10; ++i) {
     voltage += analogRead(VBAT_PIN);
     delay(1);
   }
@@ -346,7 +335,7 @@ void alarmMatch() {
 }
 
 // Print RTC date and time
-void printDatetime() {
+void printDateTime() {
   char datetimeBuffer[20];
   snprintf(datetimeBuffer, sizeof(datetimeBuffer), "%04u-%02d-%02dT%02d:%02d:%02d",
            rtc.getYear() + 2000, rtc.getMonth(), rtc.getDay(),
@@ -412,7 +401,7 @@ void readGps() {
   blinkLed(1, 100);
   GpsSerial.println("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28"); // Set NMEA sentence output frequencies to GGA and RMC
   blinkLed(1, 100);
-  GpsSerial.println("$PGCMD,33,1*6C"); // Enable antenna updates
+  //GpsSerial.println("$PGCMD,33,1*6C"); // Enable antenna updates
   GpsSerial.println("$PGCMD,33,0*6D"); // Disable antenna updates
 
   // Look for GPS signal for up to 5 minutes
@@ -420,8 +409,8 @@ void readGps() {
     if (GpsSerial.available()) {
       charsSeen = true;
       char c = GpsSerial.read();
-#if DEBUG
-      //Serial.write(c);    // Echo NMEA sentences to serial
+#if DEBUG_GPS
+      Serial.write(c); // Echo NMEA sentences to serial
 #endif
       if (gps.encode(c)) {
         if ((gps.location.isValid() && gps.date.isValid() && gps.time.isValid()) &&
@@ -443,13 +432,15 @@ void readGps() {
 
 #endif
 
-          if (fixCounter >= 10) {
+          if (fixCounter >= maxFixCounter) {
             fixFound = true;
 
             // Sync RTC with GPS time
             rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
             rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() - 2000);
 
+            Serial.print("RTC set :"); printDateTime();
+            
             message.latitude = gps.location.lat() * 1000000;
             message.longitude = gps.location.lng() * 1000000;
           }
