@@ -7,7 +7,7 @@
   - An ice tethered current meter intended for deployment in Arctic Bay, Nunavut.
   - Current measurements are conducted every 30 minutes for 2 minutes at 1-second intervals.
   - Data is transmitted via the Iridium satellite network every 4 hours.
-  
+
   Components:
     - Adafruit Feather M0 Proto
     - Adafruit Ultimate GPS Featherwing
@@ -64,7 +64,7 @@ LSM303        imu; // I2C Address: 0x1E (Magnetometer), 0x6B (Accelerometer)
 TinyGPSPlus   gps;
 
 // User defined global variable declarations
-unsigned long alarmInterval           = 300;    // Alarm sleep duration (Default: 1800 seconds)
+unsigned long alarmInterval           = 1800;    // Alarm sleep duration (Default: 1800 seconds)
 unsigned int  sampleInterval          = 5;      // Sampling duration of current tilt measurements (Default: 120 seconds)
 byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
 byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
@@ -72,9 +72,10 @@ byte          maxRetransmitCounter    = 1;      // Number of failed messages to 
 byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
 // Global variable and constant declarations
-volatile bool sleepFlag               = false;  // Flag to indicate to Watchdog Timer if in deep sleep mode
 volatile bool alarmFlag               = false;  // Flag for alarm interrupt service routine
+volatile byte watchdogCounter         = 0;      // Watchdog Timer trigger counter
 bool          ledState                = LOW;    // Flag to toggle LED in blinkLed() function
+bool          rtcFlag                 = false;  // Flag to indicate if RTC has been set
 byte          gyroFlag                = 0;      // Gyroscope flag
 byte          resetFlag               = 0;      // Flag to force Watchdog Timer system reset
 byte          transmitBuffer[340]     = {};     // RockBLOCK 9603 transmission buffer
@@ -140,9 +141,10 @@ void setup() {
   //while (!Serial); // Wait for user to open Serial Monitor
   delay(5000); // Delay to allow user to open Serial Monitor
 
-  // Configure Watchdog Timer
+  // Watchdog Timer Configuration
   configureWatchdog();
 
+  Serial.println(F("---------------------------------------"));
   Serial.println(F("Cryologger - Ice Tethered Current Meter"));
   Serial.println(F("---------------------------------------"));
 
@@ -153,52 +155,50 @@ void setup() {
   // Analog-to-digital converter (ADC) Configuration
   analogReadResolution(12); // Change the ADC resolution to 12 bits
 
-  // Real-time clock (RTC) Configuration
-  /*
-    Alarm matches:
-    MATCH_OFF          = RTC_MODE2_MASK_SEL_OFF_Val,          // Never
-    MATCH_SS           = RTC_MODE2_MASK_SEL_SS_Val,           // Every Minute
-    MATCH_MMSS         = RTC_MODE2_MASK_SEL_MMSS_Val,         // Every Hour
-    MATCH_HHMMSS       = RTC_MODE2_MASK_SEL_HHMMSS_Val,       // Every Day
-    MATCH_DHHMMSS      = RTC_MODE2_MASK_SEL_DDHHMMSS_Val,     // Every Month
-    MATCH_MMDDHHMMSS   = RTC_MODE2_MASK_SEL_MMDDHHMMSS_Val,   // Every Year
-    MATCH_YYMMDDHHMMSS = RTC_MODE2_MASK_SEL_YYMMDDHHMMSS_Val  // Once, on a specific date and a specific time
-  */
-  rtc.begin();                      // Initialize the RTC
-  rtc.setAlarmTime(0, 0, 0);        // Set alarm
-#if DEBUG
-  rtc.enableAlarm(rtc.MATCH_SS);    // Set alarm to seconds match
-#else if DEPLOY
-  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match#endif
-#endif
-  rtc.attachInterrupt(alarmMatch);  // Attach alarm interrupt
-  Serial.println(F("RTC initialized."));
-
-  // Initialize I2C
+  // IMU Configuration
   if (imu.init()) {
-    Serial.println(F("IMU detected."));
+    Serial.println(F("IMU initialized."));
   }
   else {
     Serial.println(F("Warning: IMU not detected. Please check wiring."));
   }
 
-  // Initialize the GPS
-
-  // Initialize the RockBLOCK 9603
+  // RockBLOCK 9603 Configuration
   if (modem.isConnected()) {
     modem.setPowerProfile(IridiumSBD::DEFAULT_POWER_PROFILE); // Assume battery power
     modem.adjustSendReceiveTimeout(120); // Default = 300 seconds
     modem.adjustATTimeout(20);
-    Serial.println(F("RockBLOCK 9603 detected."));
+    Serial.println(F("RockBLOCK 9603 intialized."));
   }
   else {
     Serial.println(F("Warning: RockBLOCK 9603N not detected. Please check wiring."));
   }
 
-  // Set the RTC's date and time from GPS
-  readGps();
+  // Real-time clock (RTC) Configuration
+  /*
+    Alarm matches:
+    MATCH_OFF          = Never
+    MATCH_SS           = Every Minute
+    MATCH_MMSS         = Every Hour
+    MATCH_HHMMSS       = Every Day
+    MATCH_DHHMMSS      = Every Month
+    MATCH_MMDDHHMMSS   = Every Year
+    MATCH_YYMMDDHHMMSS = Once, on a specific date and time
+  */
+  rtc.begin();                      // Initialize the RTC
+  Serial.println(F("RTC initialized."));
+  Serial.println(F("Syncing RTC date and time with GPS..."));
+  readGps();                        // Set the RTC's date and time from GPS
+  rtc.setAlarmTime(0, 0, 0);        // Set alarm
+#if DEBUG
+  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds match
+#else if DEPLOY
+  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match#endif
+#endif
+  rtc.attachInterrupt(alarmMatch);  // Attach alarm interrupt
 
-  // Set alarm
+  // Print RTC's alarm date and time
+  Serial.print(F("Next alarm: ")); printAlarm();
 
   // Print operating mode
   Serial.print(F("Mode: "));
@@ -210,10 +210,6 @@ void setup() {
 
   // Print current date and time
   Serial.print(F("Datetime: ")); printDateTime();
-
-  // Print RTC's alarm date and time
-  Serial.print(F("Next alarm: ")); printAlarm();
-
 
   // Blink LED to indicate setup has completed
   blinkLed(10, 100);
@@ -287,7 +283,6 @@ void loop() {
     Serial.print(F("Next alarm: ")); printAlarm();
   }
   alarmFlag = false; // Clear alarm interrupt service routine flag
-  sleepFlag = true; // Set Watchdog Timer sleep flag
 
 #if DEBUG
   blinkLed(1, 500);
@@ -371,10 +366,12 @@ void readImu() {
   // Start loop timer
   unsigned long loopStartTime = micros();
 
-  float ax, ay, az, mx, my, mz, gx, gy, gz;
+  float ax, ay, az, mx, my, mz, gx, gy, gz = 0.0;
   /*
     Insert IMU code here
   */
+  imu.enableDefault();
+  imu.read();
 
   // Add to statistics object
   axStats.add(imu.a.x);
@@ -387,9 +384,12 @@ void readImu() {
   //gyStats.add(imu.g.y);
   //gzStats.add(imu.g.z);
 
+  // Write data to union
+  message.gyroFlag = 0b01100101;
+
   // Stop loop timer
   unsigned long loopEndTime = micros() - loopStartTime;
-  Serial.print(F("readImu() executed in: ")); Serial.print(loopEndTime); Serial.println(F(" ms"));
+  Serial.print(F("readImu() executed in: ")); Serial.print(loopEndTime); Serial.println(F(" μs"));
 }
 
 // Read GPS
@@ -418,7 +418,7 @@ void readGps() {
   GpsSerial.println("$PGCMD,33,0*6D"); // Disable antenna updates
 
   // Look for GPS signal for up to 5 minutes
-  while (!fixFound && millis() - loopStartTime < 1UL * 30UL * 1000UL) {
+  while (!fixFound && millis() - loopStartTime < 5UL * 60UL * 1000UL) {
     if (GpsSerial.available()) {
       charsSeen = true;
       char c = GpsSerial.read();
@@ -442,16 +442,14 @@ void readGps() {
           Serial.print(gps.satellites.value());
           Serial.print(F(","));
           Serial.println(gps.hdop.hdop(), 2);
-
 #endif
-
           if (fixCounter >= maxFixCounter) {
             fixFound = true;
 
             // Sync RTC with GPS time
             rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
             rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() - 2000);
-
+            rtcFlag = true;
             Serial.print("RTC set: "); printDateTime();
 
             message.latitude = gps.location.lat() * 1000000;
@@ -877,14 +875,15 @@ void configureWatchdog() {
 
 // Pet the Watchdog Timer
 void petDog() {
-  WDT->CLEAR.bit.CLEAR = 0xA5;        // Clear the Watchdog Timer and restart time-out period //REG_WDT_CLEAR = WDT_CLEAR_CLEAR_KEY;
-  while (WDT->STATUS.bit.SYNCBUSY);   // Await synchronization of registers between clock domains
+  watchdogCounter = 0;              // Clear Watchdog Timer trigger counter
+  WDT->CLEAR.bit.CLEAR = 0xA5;      // Clear the Watchdog Timer and restart time-out period //REG_WDT_CLEAR = WDT_CLEAR_CLEAR_KEY;
+  while (WDT->STATUS.bit.SYNCBUSY); // Await synchronization of registers between clock domains
 }
 
 // Watchdog Timer interrupt service routine
 void WDT_Handler() {
-  if (sleepFlag) {
-    sleepFlag = false;
+  // Permit a limited number of Watchdog Timer triggers before forcing system reset.
+  if (watchdogCounter < 10) {
     WDT->INTFLAG.bit.EW = 1;          // Clear the Early Warning interrupt flag //REG_WDT_INTFLAG = WDT_INTFLAG_EW;
     WDT->CLEAR.bit.CLEAR = 0xA5;      // Clear the Watchdog Timer and restart time-out period //REG_WDT_CLEAR = WDT_CLEAR_CLEAR_KEY;
     while (WDT->STATUS.bit.SYNCBUSY); // Await synchronization of registers between clock domains
