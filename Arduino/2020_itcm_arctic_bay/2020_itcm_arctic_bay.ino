@@ -9,12 +9,12 @@
   - Data is transmitted via the Iridium satellite network every 4 hours.
 
   Components:
-    - Adafruit Feather M0 Proto
-    - Adafruit Ultimate GPS Featherwing
-    - Rock Seven RockBLOCK 9603
-    - Maxtena M1621HCT-P-SMA Iridium antenna
-    - Adafruit Precision NXP 9-DOF Breakout Board
-    - Adafruit Lithium Ion Battery Pack - 3.7V 6600mAh
+  - Adafruit Feather M0 Proto
+  - Adafruit Ultimate GPS Featherwing
+  - Rock Seven RockBLOCK 9603
+  - Maxtena M1621HCT-P-SMA Iridium antenna
+  - Adafruit Precision NXP 9-DOF Breakout Board
+  - Adafruit Lithium Ion Battery Pack - 3.7V 6600mAh
 
   Comments:
   - Code is ready for testing once IMU functionality is added.
@@ -44,7 +44,7 @@
 #define DEBUG         true    // Output debug messages to Serial Monitor
 #define DEBUG_GPS     false   // Echo NMEA sentences to Serial Monitor
 #define DIAGNOSTICS   true    // Output Iridium diagnostic messages to Serial Monitor
-#define DEPLOY        false   // Disable debugging messages for deployment
+#define DEPLOY        true    // Disable debugging messages for deployment
 
 // Create a new Serial/UART instance, assigning it to pins 10 and 11
 // For more information see: https://www.arduino.cc/en/Tutorial/SamdSercom
@@ -191,9 +191,10 @@ void setup() {
   readGps();                        // Set the RTC's date and time from GPS
   rtc.setAlarmTime(0, 0, 0);        // Set alarm
 #if DEBUG
-  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds match
+  //rtc.enableAlarm(rtc.MATCH_SS);  // Set alarm to seconds match
+  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match
 #else if DEPLOY
-  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match#endif
+  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match
 #endif
   rtc.attachInterrupt(alarmMatch);  // Attach alarm interrupt
 
