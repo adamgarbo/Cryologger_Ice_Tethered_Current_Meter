@@ -1,6 +1,6 @@
 /*
   Title:    Cryologger - Ice Tethered Current Meter
-  Date:     March 28, 2020
+  Date:     March 29, 2020
   Author:   Adam Garbo
 
     Components:
@@ -8,7 +8,7 @@
     - Adafruit Ultimate GPS Featherwing
     - Rock Seven RockBLOCK 9603
     - Maxtena M1621HCT-P-SMA Iridium antenna
-    - Adafruit IMU
+    - Adafruit Precision NXP 9-DOF Breakout Board
 
   Comments:
   - Code is currently under development.
@@ -35,10 +35,10 @@
 #define VBAT_PIN              A7    // Battery voltage measurement pin
 
 // Debugging constants
-#define DEBUG         true  // Output debug messages to Serial Monitor
-#define DEBUG_GPS     false // Echo NMEA sentences to Serial Monitor
-#define DIAGNOSTICS   true  // Output Iridium diagnostic messages to Serial Monitor
-#define DEPLOY        false // Disable debugging messages for deployment
+#define DEBUG         true    // Output debug messages to Serial Monitor
+#define DEBUG_GPS     false   // Echo NMEA sentences to Serial Monitor
+#define DIAGNOSTICS   true    // Output Iridium diagnostic messages to Serial Monitor
+#define DEPLOY        false   // Disable debugging messages for deployment
 
 // Create a new Serial/UART instance, assigning it to pins 10 and 11
 // For more information see: https://www.arduino.cc/en/Tutorial/SamdSercom
@@ -52,23 +52,24 @@ void SERCOM1_Handler() {
 }
 
 // Object instantiations
-RTCZero     rtc;
-IridiumSBD  modem(IridiumSerial, ROCKBLOCK_SLEEP_PIN);
-LSM303      imu; // I2C Address: 0x1E (Magnetometer), 0x6B (Accelerometer)
-TinyGPSPlus gps;
+RTCZero       rtc;
+IridiumSBD    modem(IridiumSerial, ROCKBLOCK_SLEEP_PIN);
+LSM303        imu; // I2C Address: 0x1E (Magnetometer), 0x6B (Accelerometer)
+TinyGPSPlus   gps;
 
 // User defined global variable declarations
 unsigned long alarmInterval           = 300;    // Alarm sleep duration (Default: 1800 seconds)
 unsigned int  sampleInterval          = 5;      // Sampling duration of current tilt measurements (Default: 120 seconds)
 byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
-byte          transmitInterval        = 4;      // Number of messages sent in each Iridium transmission (340-byte limit)
+byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
 byte          maxRetransmitCounter    = 1;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
 byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
 // Global variable and constant declarations
-bool          ledState                = LOW;    // Flag to toggle LED in blinkLed() function
 volatile bool sleepFlag               = false;  // Flag to indicate to Watchdog Timer if in deep sleep mode
 volatile bool alarmFlag               = false;  // Flag for alarm interrupt service routine
+bool          ledState                = LOW;    // Flag to toggle LED in blinkLed() function
+byte          gyroFlag                = 0;      // Gyroscope flag
 byte          resetFlag               = 0;      // Flag to force Watchdog Timer system reset
 byte          transmitBuffer[340]     = {};     // RockBLOCK 9603 transmission buffer
 unsigned int  messageCounter          = 0;      // RockBLOCK 9603 transmitted message counter
@@ -94,25 +95,25 @@ Statistic gzStats;
 // Structure and union to store and send data byte-by-byte via RockBLOCK
 typedef union {
   struct {
-    unsigned long unixtime;           // Unix epoch time                (4 bytes)
-    int           temperature;        // Temperature                    (2 bytes)
-    int           axMean;             // Accelerometer x                (2 bytes)
-    int           ayMean;             // Accelerometer y                (2 bytes)
-    int           azMean;             // Accelerometer z                (2 bytes)
-    int           axStdev;            // Accelerometer x                (2 bytes)
-    int           ayStdev;            // Accelerometer y                (2 bytes)
-    int           azStdev;            // Accelerometer z                (2 bytes)
-    int           mxMean;             // Magnetometer x                 (2 bytes)
-    int           myMean;             // Magnetometer y                 (2 bytes)
-    int           mzMean;             // Magnetometer z                 (2 bytes)
-    byte          gFlag;              // Gyroscope flag                 (1 byte)
-    long          latitude;           // Latitude                       (4 bytes)
-    long          longitude;          // Longitude                      (4 bytes)
-    unsigned int  voltage;            // Battery voltage (mV)           (2 bytes)
-    unsigned int  transmitDuration;   // Previous transmission duration (2 bytes)
-    unsigned int  messageCounter;     // Message counter                (2 bytes)
-  } __attribute__((packed));                                            // Total: 39 bytes
-  byte bytes[39]; // To do: Look into flexible arrays in structures
+    uint32_t  unixtime;           // Unix epoch time                (4 bytes)
+    //int16_t   temperature;        // Temperature                    (2 bytes)
+    int16_t   axMean;             // Accelerometer x                (2 bytes)
+    int16_t   ayMean;             // Accelerometer y                (2 bytes)
+    int16_t   azMean;             // Accelerometer z                (2 bytes)
+    int16_t   axStdev;            // Accelerometer x                (2 bytes)
+    int16_t   ayStdev;            // Accelerometer y                (2 bytes)
+    int16_t   azStdev;            // Accelerometer z                (2 bytes)
+    int16_t   mxMean;             // Magnetometer x                 (2 bytes)
+    int16_t   myMean;             // Magnetometer y                 (2 bytes)
+    int16_t   mzMean;             // Magnetometer z                 (2 bytes)
+    int8_t    gyroFlag;           // Gyroscope flag                 (1 byte)
+    int32_t   latitude;           // Latitude                       (4 bytes)
+    int32_t   longitude;          // Longitude                      (4 bytes)
+    uint16_t  voltage;            // Battery voltage (mV)           (2 bytes)
+    uint16_t  transmitDuration;   // Previous transmission duration (2 bytes)
+    uint16_t  messageCounter;     // Message counter                (2 bytes)
+  } __attribute__((packed));                                        // Total: 39 bytes
+  byte bytes[37]; // To do: Look into flexible arrays in structures
 } SBDMESSAGE;
 
 SBDMESSAGE message;
@@ -157,7 +158,7 @@ void setup() {
     MATCH_MMDDHHMMSS   = RTC_MODE2_MASK_SEL_MMDDHHMMSS_Val,   // Every Year
     MATCH_YYMMDDHHMMSS = RTC_MODE2_MASK_SEL_YYMMDDHHMMSS_Val  // Once, on a specific date and a specific time
   */
-  rtc.begin();                      // Initialize RTC
+  rtc.begin();                      // Initialize the RTC
   rtc.setAlarmTime(0, 0, 0);        // Set alarm
 #if DEBUG
   rtc.enableAlarm(rtc.MATCH_SS);    // Set alarm to seconds match
@@ -167,7 +168,7 @@ void setup() {
   rtc.attachInterrupt(alarmMatch);  // Attach alarm interrupt
   Serial.println(F("RTC initialized."));
 
-  // IMU Configuration
+  // Initialize I2C
   if (imu.init()) {
     Serial.println(F("IMU detected."));
   }
@@ -175,12 +176,12 @@ void setup() {
     Serial.println(F("Warning: IMU not detected. Please check wiring."));
   }
 
-  // GPS Configuration
+  // Initialize the GPS
 
-  // RockBLOCK 9603 Configuration
+  // Initialize the RockBLOCK 9603
   if (modem.isConnected()) {
     modem.setPowerProfile(IridiumSBD::DEFAULT_POWER_PROFILE); // Assume battery power
-    modem.adjustSendReceiveTimeout(180); // Default = 300 seconds
+    modem.adjustSendReceiveTimeout(120); // Default = 300 seconds
     modem.adjustATTimeout(20);
     Serial.println(F("RockBLOCK 9603 detected."));
   }
@@ -190,6 +191,13 @@ void setup() {
 
   // Print current date and time
   Serial.print(F("Datetime: ")); printDateTime();
+
+
+
+  // Set the RTC's date and time from GPS
+  readGps();
+
+  // Set alarm
 
   // Print operating mode
   Serial.print(F("Mode: "));
@@ -201,9 +209,6 @@ void setup() {
 
   // Blink LED to indicate setup has completed
   blinkLed(10, 100);
-
-  // Set the RTC's date and time from GPS
-  readGps();
 }
 
 // Loop
@@ -308,7 +313,7 @@ void readBattery() {
 
   // Stop loop timer
   unsigned long loopEndTime = millis() - loopStartTime;
-  Serial.print("readBattery() function execution: "); Serial.print(loopEndTime); Serial.println(F(" ms"));
+  //Serial.print("readBattery() function execution: "); Serial.print(loopEndTime); Serial.println(F(" ms"));
 }
 
 // Read RTC
@@ -401,7 +406,7 @@ void readGps() {
   blinkLed(1, 100);
   GpsSerial.println("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28"); // Set NMEA sentence output frequencies to GGA and RMC
   blinkLed(1, 100);
-  //GpsSerial.println("$PGCMD,33,1*6C"); // Enable antenna updates
+  GpsSerial.println("$PGCMD,33,1*6C"); // Enable antenna updates
   GpsSerial.println("$PGCMD,33,0*6D"); // Disable antenna updates
 
   // Look for GPS signal for up to 5 minutes
@@ -439,8 +444,8 @@ void readGps() {
             rtc.setTime(gps.time.hour(), gps.time.minute(), gps.time.second());
             rtc.setDate(gps.date.day(), gps.date.month(), gps.date.year() - 2000);
 
-            Serial.print("RTC set :"); printDateTime();
-            
+            Serial.print("RTC set: "); printDateTime();
+
             message.latitude = gps.location.lat() * 1000000;
             message.longitude = gps.location.lng() * 1000000;
           }
@@ -469,25 +474,25 @@ void readGps() {
 void calculateStatistics() {
 
   // Write data to union
+  message.voltage = batteryStats.average() * 1000;
   message.axMean = axStats.average() * 100;
   message.ayMean = ayStats.average() * 100;
   message.azMean = azStats.average() * 100;
-  message.mxMean = mxStats.average() * 100;
-  message.myMean = myStats.average() * 100;
-  message.mzMean = mzStats.average() * 100;
-  //message.gxMean = gxStats.average() * 100;
-  //message.gyMean = gyStats.average() * 100;
-  //message.gzMean = gzStats.average() * 100;
   message.axStdev = axStats.pop_stdev() * 100;
   message.ayStdev = ayStats.pop_stdev() * 100;
   message.azStdev = azStats.pop_stdev() * 100;
+  message.mxMean = mxStats.average() * 100;
+  message.myMean = myStats.average() * 100;
+  message.mzMean = mzStats.average() * 100;
   //message.mxStdev = mxStats.pop_stdev() * 100;
   //message.myStdev = myStats.pop_stdev() * 100;
   //message.mzStdev = mzStats.pop_stdev() * 100;
+  //message.gxMean = gxStats.average() * 100;
+  //message.gyMean = gyStats.average() * 100;
+  //message.gzMean = gzStats.average() * 100;
   //message.gxStdev = gxStats.pop_stdev() * 100;
   //message.gyStdev = gyStats.pop_stdev() * 100;
   //message.gzStdev = gzStats.pop_stdev() * 100;
-  message.voltage = batteryStats.average() * 1000;
 
   // Clear statistics objects
   axStats.clear();
@@ -514,8 +519,8 @@ void writeBuffer() {
 
 #if DEBUG
   printUnion();
-  //printUnionBinary(); // Print union/structure in hex/binary
-  //printTransmitBuffer();  // Print transmit buffer in hex/binary
+  printUnionBinary(); // Print union/structure in hex/binary
+  printTransmitBuffer();  // Print transmit buffer in hex/binary
 #endif
 }
 
@@ -576,11 +581,11 @@ void transmitData() {
         }
 
         // Recompose bits using bitshift
-        byte resetFlagBuffer = (((byte)inBuffer[8] << 0) & 0xFF);
-        unsigned int maxRetransmitCounterBuffer = (((unsigned int)inBuffer[7] << 0) & 0xFF) +  (((unsigned int)inBuffer[6] << 8) & 0xFFFF);
-        unsigned int transmitIntervalBuffer = (((unsigned int)inBuffer[5] << 0) & 0xFF) + (((unsigned int)inBuffer[4] << 8) & 0xFFFF);
-        unsigned long alarmIntervalBuffer = (((unsigned long)inBuffer[3] << 0) & 0xFF) + (((unsigned long)inBuffer[2] << 8) & 0xFFFF) +
-                                            (((unsigned long)inBuffer[1] << 16) & 0xFFFFFF) + (((unsigned long)inBuffer[0] << 24) & 0xFFFFFFFF);
+        uint8_t resetFlagBuffer             = (((uint8_t)inBuffer[8] << 0) & 0xFF);
+        uint16_t maxRetransmitCounterBuffer = (((uint16_t)inBuffer[7] << 0) & 0xFF) +  (((uint16_t)inBuffer[6] << 8) & 0xFFFF);
+        uint16_t transmitIntervalBuffer     = (((uint16_t)inBuffer[5] << 0) & 0xFF) + (((uint16_t)inBuffer[4] << 8) & 0xFFFF);
+        uint32_t alarmIntervalBuffer        = (((uint32_t)inBuffer[3] << 0) & 0xFF) + (((uint32_t)inBuffer[2] << 8) & 0xFFFF) +
+                                              (((uint32_t)inBuffer[1] << 16) & 0xFFFFFF) + (((uint32_t)inBuffer[0] << 24) & 0xFFFFFFFF);
 
         // Check if incoming data is valid
         if ((alarmIntervalBuffer >= 300 && alarmIntervalBuffer <= 1209600) &&
@@ -670,17 +675,19 @@ void blinkLed(byte flashes, unsigned long interval) {
       i++;
     }
   }
+  digitalWrite(LED_BUILTIN, LOW);
 }
 
 // Blink LED
-void blinkLED(unsigned long interval) {
-  digitalWrite(LED_BUILTIN, (millis() / interval) % 2 == 1 ? HIGH : LOW);
+void blinkLED() {
+  digitalWrite(LED_BUILTIN, (millis() / 1000) % 2 == 1 ? HIGH : LOW);
 }
 
 // RockBLOCK callback function
 bool ISBDCallback() {
   petDog(); // Pet the Watchdog
-  blinkLED(1000);
+  //readBattery();
+  blinkLED();
   return true;
 }
 
@@ -717,10 +724,20 @@ void printUnion() {
   Serial.println(F("Union/structure"));
   Serial.println(F("-----------------------------------"));
   Serial.print(F("unixtime:\t\t")); Serial.println(message.unixtime);
-  Serial.print(F("temperature:\t\t")); Serial.println(message.temperature);
+  //Serial.print(F("temperature:\t\t")); Serial.println(message.temperature);
   //Serial.print(F("pitch:\t\t\t")); Serial.println(message.pitch);
   //Serial.print(F("roll:\t\t\t")); Serial.println(message.roll);
   //Serial.print(F("heading:\t\t")); Serial.println(message.heading);
+  Serial.print(F("axMean:\t\t\t")); Serial.println(message.axMean);
+  Serial.print(F("ayMean:\t\t\t")); Serial.println(message.ayMean);
+  Serial.print(F("azMean:\t\t\t")); Serial.println(message.azMean);
+  Serial.print(F("axStdev:\t\t\t")); Serial.println(message.axStdev);
+  Serial.print(F("ayStdev:\t\t\t")); Serial.println(message.ayStdev);
+  Serial.print(F("azStdev:\t\t\t")); Serial.println(message.azStdev);
+  Serial.print(F("mxMean:\t\t\t")); Serial.println(message.mxMean);
+  Serial.print(F("myMean:\t\t\t")); Serial.println(message.myMean);
+  Serial.print(F("mzMean:\t\t\t")); Serial.println(message.mzMean);
+  Serial.print(F("gyroFlag:\t\t\t")); Serial.println(message.gyroFlag);
   Serial.print(F("latitude:\t\t")); Serial.println(message.latitude);
   Serial.print(F("longitude:\t\t")); Serial.println(message.longitude);
   //Serial.print(F("satellites:\t\t")); Serial.println(message.satellites);
