@@ -3,29 +3,35 @@
   Date:     March 29, 2020
   Author:   Adam Garbo
 
-    Components:
+  Description:
+  - An ice tethered current meter intended for deployment in Arctic Bay, Nunavut.
+  - Current measurements are conducted every 30 minutes for 2 minutes at 1-second intervals.
+  - Data is transmitted via the Iridium satellite network every 4 hours.
+  
+  Components:
     - Adafruit Feather M0 Proto
     - Adafruit Ultimate GPS Featherwing
     - Rock Seven RockBLOCK 9603
     - Maxtena M1621HCT-P-SMA Iridium antenna
     - Adafruit Precision NXP 9-DOF Breakout Board
+    - Adafruit Lithium Ion Battery Pack - 3.7V 6600mAh
 
   Comments:
-  - Code is currently under development.
+  - Code is currently under development and testing.
 */
 
 // Libraries
-#include <Arduino.h>                // https://github.com/arduino/ArduinoCore-samd (required before wiring_private.h)
-#include <ArduinoLowPower.h>        // https://github.com/arduino-libraries/ArduinoLowPower
-#include <IridiumSBD.h>             // https://github.com/PaulZC/IridiumSBD
-#include <math.h>                   // https://www.nongnu.org/avr-libc/user-manual/group__avr__math.html
-#include <RTCZero.h>                // https://github.com/arduino-libraries/RTCZero
-#include <LSM303.h>                 // https://github.com/pololu/lsm303-arduino
-#include <Statistic.h>              // https://github.com/RobTillaart/Arduino/tree/master/libraries/Statistic
-#include <TimeLib.h>                // https://github.com/PaulStoffregen/Time
-#include <TinyGPS++.h>              // https://github.com/mikalhart/TinyGPSPlus
-#include <Wire.h>                   // https://www.arduino.cc/en/Reference/Wire
-#include <wiring_private.h>         // https://github.com/arduino/ArduinoCore-samd/blob/master/cores/arduino/wiring_private.h (required for pinPeripheral() function)
+#include <Arduino.h>          // https://github.com/arduino/ArduinoCore-samd (required before wiring_private.h)
+#include <ArduinoLowPower.h>  // https://github.com/arduino-libraries/ArduinoLowPower
+#include <IridiumSBD.h>       // https://github.com/PaulZC/IridiumSBD
+#include <math.h>             // https://www.nongnu.org/avr-libc/user-manual/group__avr__math.html
+#include <RTCZero.h>          // https://github.com/arduino-libraries/RTCZero
+#include <LSM303.h>           // https://github.com/pololu/lsm303-arduino
+#include <Statistic.h>        // https://github.com/RobTillaart/Arduino/tree/master/libraries/Statistic
+#include <TimeLib.h>          // https://github.com/PaulStoffregen/Time
+#include <TinyGPS++.h>        // https://github.com/mikalhart/TinyGPSPlus
+#include <Wire.h>             // https://www.arduino.cc/en/Reference/Wire
+#include <wiring_private.h>   // https://github.com/arduino/ArduinoCore-samd/blob/master/cores/arduino/wiring_private.h (required for pinPeripheral() function)
 
 // Pin definitons
 #define GPS_EN_PIN            A5    // GPS enable pin
@@ -189,11 +195,6 @@ void setup() {
     Serial.println(F("Warning: RockBLOCK 9603N not detected. Please check wiring."));
   }
 
-  // Print current date and time
-  Serial.print(F("Datetime: ")); printDateTime();
-
-
-
   // Set the RTC's date and time from GPS
   readGps();
 
@@ -206,6 +207,13 @@ void setup() {
 #else if DEPLOY
   Serial.println(F("DEPLOY"));
 #endif
+
+  // Print current date and time
+  Serial.print(F("Datetime: ")); printDateTime();
+
+  // Print RTC's alarm date and time
+  Serial.print(F("Next alarm: ")); printAlarm();
+
 
   // Blink LED to indicate setup has completed
   blinkLed(10, 100);
@@ -406,11 +414,11 @@ void readGps() {
   blinkLed(1, 100);
   GpsSerial.println("$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28"); // Set NMEA sentence output frequencies to GGA and RMC
   blinkLed(1, 100);
-  GpsSerial.println("$PGCMD,33,1*6C"); // Enable antenna updates
+  //GpsSerial.println("$PGCMD,33,1*6C"); // Enable antenna updates
   GpsSerial.println("$PGCMD,33,0*6D"); // Disable antenna updates
 
   // Look for GPS signal for up to 5 minutes
-  while (!fixFound && millis() - loopStartTime < 5UL * 60UL * 1000UL) {
+  while (!fixFound && millis() - loopStartTime < 1UL * 30UL * 1000UL) {
     if (GpsSerial.available()) {
       charsSeen = true;
       char c = GpsSerial.read();
@@ -519,8 +527,8 @@ void writeBuffer() {
 
 #if DEBUG
   printUnion();
-  printUnionBinary(); // Print union/structure in hex/binary
-  printTransmitBuffer();  // Print transmit buffer in hex/binary
+  //printUnionBinary(); // Print union/structure in hex/binary
+  //printTransmitBuffer();  // Print transmit buffer in hex/binary
 #endif
 }
 
@@ -716,6 +724,62 @@ void printStatistics() {
   Serial.print(F("\tMax: ")); Serial.print(batteryStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(batteryStats.average());
   Serial.print(F("\tSD: ")); Serial.println(batteryStats.unbiased_stdev());
+  Serial.println(F("ax:"));
+  Serial.print(F("Samples: ")); Serial.print(axStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(axStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(axStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(axStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(axStats.unbiased_stdev());
+  Serial.println(F("ay:"));
+  Serial.print(F("Samples: ")); Serial.print(ayStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(ayStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(ayStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(ayStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(ayStats.unbiased_stdev());
+  Serial.println(F("az:"));
+  Serial.print(F("Samples: ")); Serial.print(azStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(azStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(azStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(azStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(azStats.unbiased_stdev());
+  Serial.println(F("mx:"));
+  Serial.print(F("Samples: ")); Serial.print(mxStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(mxStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(mxStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(mxStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(mxStats.unbiased_stdev());
+  Serial.println(F("my:"));
+  Serial.print(F("Samples: ")); Serial.print(myStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(myStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(myStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(myStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(myStats.unbiased_stdev());
+  Serial.println(F("mz:"));
+  Serial.print(F("Samples: ")); Serial.print(mzStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(mzStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(mzStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(mzStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(mzStats.unbiased_stdev());
+  /*
+    Serial.println(F("gx:"));
+    Serial.print(F("Samples: ")); Serial.print(gxStats.count());
+    Serial.print(F("\tMin: "));   Serial.print(gxStats.minimum());
+    Serial.print(F("\tMax: ")); Serial.print(gxStats.maximum());
+    Serial.print(F("\tMean: ")); Serial.print(gxStats.average());
+    Serial.print(F("\tSD: ")); Serial.println(gxStats.unbiased_stdev());
+    Serial.println(F("gy:"));
+    Serial.print(F("Samples: ")); Serial.print(gyStats.count());
+    Serial.print(F("\tMin: "));   Serial.print(gyStats.minimum());
+    Serial.print(F("\tMax: ")); Serial.print(gyStats.maximum());
+    Serial.print(F("\tMean: ")); Serial.print(gyStats.average());
+    Serial.print(F("\tSD: ")); Serial.println(gyStats.unbiased_stdev());
+    Serial.println(F("gz:"));
+    Serial.print(F("Samples: ")); Serial.print(gzStats.count());
+    Serial.print(F("\tMin: "));   Serial.print(gzStats.minimum());
+    Serial.print(F("\tMax: ")); Serial.print(gzStats.maximum());
+    Serial.print(F("\tMean: ")); Serial.print(gzStats.average());
+    Serial.print(F("\tSD: ")); Serial.println(gzStats.unbiased_stdev());
+  */
 }
 
 // Print union/structure
@@ -731,13 +795,13 @@ void printUnion() {
   Serial.print(F("axMean:\t\t\t")); Serial.println(message.axMean);
   Serial.print(F("ayMean:\t\t\t")); Serial.println(message.ayMean);
   Serial.print(F("azMean:\t\t\t")); Serial.println(message.azMean);
-  Serial.print(F("axStdev:\t\t\t")); Serial.println(message.axStdev);
-  Serial.print(F("ayStdev:\t\t\t")); Serial.println(message.ayStdev);
-  Serial.print(F("azStdev:\t\t\t")); Serial.println(message.azStdev);
+  Serial.print(F("axStdev:\t\t")); Serial.println(message.axStdev);
+  Serial.print(F("ayStdev:\t\t")); Serial.println(message.ayStdev);
+  Serial.print(F("azStdev:\t\t")); Serial.println(message.azStdev);
   Serial.print(F("mxMean:\t\t\t")); Serial.println(message.mxMean);
   Serial.print(F("myMean:\t\t\t")); Serial.println(message.myMean);
   Serial.print(F("mzMean:\t\t\t")); Serial.println(message.mzMean);
-  Serial.print(F("gyroFlag:\t\t\t")); Serial.println(message.gyroFlag);
+  Serial.print(F("gyroFlag:\t\t")); Serial.println(message.gyroFlag);
   Serial.print(F("latitude:\t\t")); Serial.println(message.latitude);
   Serial.print(F("longitude:\t\t")); Serial.println(message.longitude);
   //Serial.print(F("satellites:\t\t")); Serial.println(message.satellites);
