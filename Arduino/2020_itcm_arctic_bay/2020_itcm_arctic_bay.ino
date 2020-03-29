@@ -17,7 +17,7 @@
     - Adafruit Lithium Ion Battery Pack - 3.7V 6600mAh
 
   Comments:
-  - Code is currently under development and testing.
+  - Code is ready for testing once IMU functionality is added.
 */
 
 // Libraries
@@ -64,8 +64,8 @@ LSM303        imu; // I2C Address: 0x1E (Magnetometer), 0x6B (Accelerometer)
 TinyGPSPlus   gps;
 
 // User defined global variable declarations
-unsigned long alarmInterval           = 1800;    // Alarm sleep duration (Default: 1800 seconds)
-unsigned int  sampleInterval          = 5;      // Sampling duration of current tilt measurements (Default: 120 seconds)
+unsigned long alarmInterval           = 1800;   // Alarm sleep duration (Default: 1800 seconds)
+unsigned int  sampleInterval          = 120;    // Sampling duration of current tilt measurements (Default: 120 seconds)
 byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
 byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
 byte          maxRetransmitCounter    = 1;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
