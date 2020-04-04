@@ -1,6 +1,6 @@
 /*
   Title:    Cryologger - Ice Tethered Current Meter
-  Date:     March 29, 2020
+  Date:     April 4, 2020
   Author:   Adam Garbo
 
   Description:
@@ -21,10 +21,13 @@
 */
 
 // Libraries
-#include <Arduino.h>          // https://github.com/arduino/ArduinoCore-samd (required before wiring_private.h)
-#include <ArduinoLowPower.h>  // https://github.com/arduino-libraries/ArduinoLowPower
-#include <IridiumSBD.h>       // https://github.com/PaulZC/IridiumSBD
-#include <math.h>             // https://www.nongnu.org/avr-libc/user-manual/group__avr__math.html
+#include <Adafruit_Sensor.h>
+#include <Adafruit_FXAS21002C.h>
+#include <Adafruit_FXOS8700.h>
+#include <Arduino.h>              // https://github.com/arduino/ArduinoCore-samd (required before wiring_private.h)
+#include <ArduinoLowPower.h>      // https://github.com/arduino-libraries/ArduinoLowPower
+#include <IridiumSBD.h>           // https://github.com/PaulZC/IridiumSBD
+#include <math.h>                 // https://www.nongnu.org/avr-libc/user-manual/group__avr__math.html
 #include <RTCZero.h>          // https://github.com/arduino-libraries/RTCZero
 #include <LSM303.h>           // https://github.com/pololu/lsm303-arduino
 #include <Statistic.h>        // https://github.com/RobTillaart/Arduino/tree/master/libraries/Statistic
@@ -32,6 +35,8 @@
 #include <TinyGPS++.h>        // https://github.com/mikalhart/TinyGPSPlus
 #include <Wire.h>             // https://www.arduino.cc/en/Reference/Wire
 #include <wiring_private.h>   // https://github.com/arduino/ArduinoCore-samd/blob/master/cores/arduino/wiring_private.h (required for pinPeripheral() function)
+
+
 
 // Pin definitons
 #define GPS_EN_PIN            A5    // GPS enable pin
@@ -44,7 +49,7 @@
 #define DEBUG         true    // Output debug messages to Serial Monitor
 #define DEBUG_GPS     false   // Echo NMEA sentences to Serial Monitor
 #define DIAGNOSTICS   true    // Output Iridium diagnostic messages to Serial Monitor
-#define DEPLOY        true    // Disable debugging messages for deployment
+#define DEPLOY        false    // Disable debugging messages for deployment
 
 // Create a new Serial/UART instance, assigning it to pins 10 and 11
 // For more information see: https://www.arduino.cc/en/Tutorial/SamdSercom
@@ -58,10 +63,11 @@ void SERCOM1_Handler() {
 }
 
 // Object instantiations
-RTCZero       rtc;
-IridiumSBD    modem(IridiumSerial, ROCKBLOCK_SLEEP_PIN);
-LSM303        imu; // I2C Address: 0x1E (Magnetometer), 0x6B (Accelerometer)
-TinyGPSPlus   gps;
+Adafruit_FXOS8700   accelmag  = Adafruit_FXOS8700(0x8700A, 0x8700B);
+Adafruit_FXAS21002C gyro      = Adafruit_FXAS21002C(0x0021002C);
+RTCZero             rtc;
+IridiumSBD          modem(IridiumSerial, ROCKBLOCK_SLEEP_PIN);
+TinyGPSPlus         gps;
 
 // User defined global variable declarations
 unsigned long alarmInterval           = 1800;   // Alarm sleep duration (Default: 1800 seconds)
@@ -86,6 +92,7 @@ unsigned long previousMillis          = 0;      // Global millis() timer variabl
 unsigned long unixtime                = 0;      // UNIX Epoch time variable
 unsigned long alarmTime               = 0;      // Epoch alarm time variable
 tmElements_t  tm;
+sensors_event_t aEvent, mEvent, gEvent;                // Internal measurement unit variables
 
 // Statistics objects
 Statistic batteryStats;
@@ -103,7 +110,7 @@ Statistic gzStats;
 typedef union {
   struct {
     uint32_t  unixtime;           // Unix epoch time                (4 bytes)
-    //int16_t   temperature;        // Temperature                    (2 bytes)
+    int16_t   temperature;        // Temperature                    (2 bytes)
     int16_t   axMean;             // Accelerometer x                (2 bytes)
     int16_t   ayMean;             // Accelerometer y                (2 bytes)
     int16_t   azMean;             // Accelerometer z                (2 bytes)
@@ -120,7 +127,7 @@ typedef union {
     uint16_t  transmitDuration;   // Previous transmission duration (2 bytes)
     uint16_t  messageCounter;     // Message counter                (2 bytes)
   } __attribute__((packed));                                        // Total: 39 bytes
-  byte bytes[37]; // To do: Look into flexible arrays in structures
+  uint8_t bytes[300]; // To do: Look into flexible arrays in structures
 } SBDMESSAGE;
 
 SBDMESSAGE message;
@@ -155,12 +162,21 @@ void setup() {
   // Analog-to-digital converter (ADC) Configuration
   analogReadResolution(12); // Change the ADC resolution to 12 bits
 
-  // IMU Configuration
-  if (imu.init()) {
-    Serial.println(F("IMU initialized."));
+  // Inertial Measurement Unit (IMU) Configuration
+  if (accelmag.begin(ACCEL_RANGE_2G)) {
+    Serial.println("FXOS8700 initialized.");
   }
   else {
-    Serial.println(F("Warning: IMU not detected. Please check wiring."));
+    Serial.println("Warning: FXOS8700 not detected. Please check wiring.");
+    while (1);
+  }
+
+  if (gyro.begin()) {
+    Serial.println("FXAS21002C initialized.");
+  }
+  else {
+    Serial.println("Warning: FXAS21002C not detected. Please check wiring.");
+    while (1);
   }
 
   // RockBLOCK 9603 Configuration
@@ -191,8 +207,8 @@ void setup() {
   readGps();                        // Set the RTC's date and time from GPS
   rtc.setAlarmTime(0, 0, 0);        // Set alarm
 #if DEBUG
-  //rtc.enableAlarm(rtc.MATCH_SS);  // Set alarm to seconds match
-  rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match
+  rtc.enableAlarm(rtc.MATCH_SS);  // Set alarm to seconds match
+  //rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match
 #else if DEPLOY
   rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match
 #endif
@@ -367,23 +383,20 @@ void readImu() {
   // Start loop timer
   unsigned long loopStartTime = micros();
 
-  float ax, ay, az, mx, my, mz, gx, gy, gz = 0.0;
-  /*
-    Insert IMU code here
-  */
-  imu.enableDefault();
-  imu.read();
+  // Get a new sensor event
+  accelmag.getEvent(&aEvent, &mEvent);  // Measured in m/s^2 and uTesla
+  gyro.getEvent(&gEvent);               // Measured in rad/s
 
   // Add to statistics object
-  axStats.add(imu.a.x);
-  ayStats.add(imu.a.y);
-  azStats.add(imu.a.z);
-  mxStats.add(imu.m.x);
-  myStats.add(imu.m.y);
-  mzStats.add(imu.m.z);
-  //gxStats.add(imu.g.x);
-  //gyStats.add(imu.g.y);
-  //gzStats.add(imu.g.z);
+  axStats.add(aEvent.acceleration.x);
+  ayStats.add(aEvent.acceleration.y);
+  azStats.add(aEvent.acceleration.z);
+  mxStats.add(mEvent.magnetic.x);
+  myStats.add(mEvent.magnetic.y);
+  mzStats.add(mEvent.magnetic.z);
+  gxStats.add(gEvent.gyro.x);
+  gyStats.add(gEvent.gyro.y);
+  gzStats.add(gEvent.gyro.z);
 
   // Write data to union
   message.gyroFlag = 0b01100101;
