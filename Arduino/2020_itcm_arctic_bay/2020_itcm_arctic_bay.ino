@@ -1,6 +1,6 @@
 /*
-  Title:    Cryologger - Ice Tethered Current Meter
-  Date:     April 4, 2020
+  Title:    Cryologger - Ice-Tethered Current Meter
+  Date:     April 5, 2020
   Author:   Adam Garbo
 
   Description:
@@ -21,22 +21,20 @@
 */
 
 // Libraries
-#include <Adafruit_Sensor.h>
-#include <Adafruit_FXAS21002C.h>
-#include <Adafruit_FXOS8700.h>
+#include <Adafruit_Sensor.h>      // https://github.com/adafruit/Adafruit_Sensor
+#include <Adafruit_FXAS21002C.h>  // https://github.com/adafruit/Adafruit_FXAS21002C
+#include <Adafruit_FXOS8700.h>    // https://github.com/adafruit/Adafruit_FXOS8700
 #include <Arduino.h>              // https://github.com/arduino/ArduinoCore-samd (required before wiring_private.h)
 #include <ArduinoLowPower.h>      // https://github.com/arduino-libraries/ArduinoLowPower
 #include <IridiumSBD.h>           // https://github.com/PaulZC/IridiumSBD
 #include <math.h>                 // https://www.nongnu.org/avr-libc/user-manual/group__avr__math.html
-#include <RTCZero.h>          // https://github.com/arduino-libraries/RTCZero
-#include <LSM303.h>           // https://github.com/pololu/lsm303-arduino
-#include <Statistic.h>        // https://github.com/RobTillaart/Arduino/tree/master/libraries/Statistic
-#include <TimeLib.h>          // https://github.com/PaulStoffregen/Time
-#include <TinyGPS++.h>        // https://github.com/mikalhart/TinyGPSPlus
-#include <Wire.h>             // https://www.arduino.cc/en/Reference/Wire
-#include <wiring_private.h>   // https://github.com/arduino/ArduinoCore-samd/blob/master/cores/arduino/wiring_private.h (required for pinPeripheral() function)
-
-
+#include <RTCZero.h>              // https://github.com/arduino-libraries/RTCZero
+#include <LSM303.h>               // https://github.com/pololu/lsm303-arduino
+#include <Statistic.h>            // https://github.com/RobTillaart/Arduino/tree/master/libraries/Statistic
+#include <TimeLib.h>              // https://github.com/PaulStoffregen/Time
+#include <TinyGPS++.h>            // https://github.com/mikalhart/TinyGPSPlus
+#include <Wire.h>                 // https://www.arduino.cc/en/Reference/Wire
+#include <wiring_private.h>       // https://github.com/arduino/ArduinoCore-samd/blob/master/cores/arduino/wiring_private.h (required for pinPeripheral() function)
 
 // Pin definitons
 #define GPS_EN_PIN            A5    // GPS enable pin
@@ -772,26 +770,25 @@ void printStatistics() {
   Serial.print(F("\tMax: ")); Serial.print(mzStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(mzStats.average());
   Serial.print(F("\tSD: ")); Serial.println(mzStats.unbiased_stdev());
-  /*
-    Serial.println(F("gx:"));
-    Serial.print(F("Samples: ")); Serial.print(gxStats.count());
-    Serial.print(F("\tMin: "));   Serial.print(gxStats.minimum());
-    Serial.print(F("\tMax: ")); Serial.print(gxStats.maximum());
-    Serial.print(F("\tMean: ")); Serial.print(gxStats.average());
-    Serial.print(F("\tSD: ")); Serial.println(gxStats.unbiased_stdev());
-    Serial.println(F("gy:"));
-    Serial.print(F("Samples: ")); Serial.print(gyStats.count());
-    Serial.print(F("\tMin: "));   Serial.print(gyStats.minimum());
-    Serial.print(F("\tMax: ")); Serial.print(gyStats.maximum());
-    Serial.print(F("\tMean: ")); Serial.print(gyStats.average());
-    Serial.print(F("\tSD: ")); Serial.println(gyStats.unbiased_stdev());
-    Serial.println(F("gz:"));
-    Serial.print(F("Samples: ")); Serial.print(gzStats.count());
-    Serial.print(F("\tMin: "));   Serial.print(gzStats.minimum());
-    Serial.print(F("\tMax: ")); Serial.print(gzStats.maximum());
-    Serial.print(F("\tMean: ")); Serial.print(gzStats.average());
-    Serial.print(F("\tSD: ")); Serial.println(gzStats.unbiased_stdev());
-  */
+  Serial.println(F("gx:"));
+  Serial.print(F("Samples: ")); Serial.print(gxStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(gxStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(gxStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(gxStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(gxStats.unbiased_stdev());
+  Serial.println(F("gy:"));
+  Serial.print(F("Samples: ")); Serial.print(gyStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(gyStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(gyStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(gyStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(gyStats.unbiased_stdev());
+  Serial.println(F("gz:"));
+  Serial.print(F("Samples: ")); Serial.print(gzStats.count());
+  Serial.print(F("\tMin: "));   Serial.print(gzStats.minimum());
+  Serial.print(F("\tMax: ")); Serial.print(gzStats.maximum());
+  Serial.print(F("\tMean: ")); Serial.print(gzStats.average());
+  Serial.print(F("\tSD: ")); Serial.println(gzStats.unbiased_stdev());
+
 }
 
 // Print union/structure
