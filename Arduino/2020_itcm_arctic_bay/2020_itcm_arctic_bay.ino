@@ -1,6 +1,6 @@
 /*
   Title:    Cryologger - Ice-Tethered Current Meter
-  Date:     April 5, 2020
+  Date:     April 6, 2020
   Author:   Adam Garbo
 
   Description:
@@ -37,11 +37,11 @@
 #include <wiring_private.h>       // https://github.com/arduino/ArduinoCore-samd/blob/master/cores/arduino/wiring_private.h (required for pinPeripheral() function)
 
 // Pin definitons
-#define GPS_EN_PIN            A5    // GPS enable pin
-#define ROCKBLOCK_RX_PIN      10    // RockBLOCK 9603 RX pin
-#define ROCKBLOCK_TX_PIN      11    // RockBLOCK 9603 TX pin
-#define ROCKBLOCK_SLEEP_PIN   12    // RockBLOCK 9603 sleep pin
-#define VBAT_PIN              A7    // Battery voltage measurement pin
+#define GPS_EN_PIN            A5  // GPS enable pin
+#define ROCKBLOCK_RX_PIN      10  // RockBLOCK 9603 RX pin
+#define ROCKBLOCK_TX_PIN      11  // RockBLOCK 9603 TX pin
+#define ROCKBLOCK_SLEEP_PIN   12  // RockBLOCK 9603 sleep pin
+#define VBAT_PIN              A7  // Battery voltage measurement pin
 
 // Debugging constants
 #define DEBUG         true    // Output debug messages to Serial Monitor
@@ -90,7 +90,7 @@ unsigned long previousMillis          = 0;      // Global millis() timer variabl
 unsigned long unixtime                = 0;      // UNIX Epoch time variable
 unsigned long alarmTime               = 0;      // Epoch alarm time variable
 tmElements_t  tm;
-sensors_event_t aEvent, mEvent, gEvent;                // Internal measurement unit variables
+sensors_event_t aEvent, mEvent, gEvent;         // Internal measurement unit variables
 
 // Statistics objects
 Statistic batteryStats;
@@ -108,7 +108,7 @@ Statistic gzStats;
 typedef union {
   struct {
     uint32_t  unixtime;           // Unix epoch time                (4 bytes)
-    int16_t   temperature;        // Temperature                    (2 bytes)
+    //int16_t   temperature;        // Temperature                    (2 bytes)
     int16_t   axMean;             // Accelerometer x                (2 bytes)
     int16_t   ayMean;             // Accelerometer y                (2 bytes)
     int16_t   azMean;             // Accelerometer z                (2 bytes)
@@ -397,7 +397,11 @@ void readImu() {
   gzStats.add(gEvent.gyro.z);
 
   // Write data to union
-  message.gyroFlag = 0b01100101;
+  message.gyroFlag = 0b01100101; // Just an example
+
+  // Place accelerometer and gyroscope in low-power (standby) mode
+  accelmag.standby(1);
+  gyro.standby(1);
 
   // Stop loop timer
   unsigned long loopEndTime = micros() - loopStartTime;
