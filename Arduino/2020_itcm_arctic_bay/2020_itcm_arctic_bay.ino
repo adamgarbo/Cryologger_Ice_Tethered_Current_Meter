@@ -125,7 +125,7 @@ typedef union {
     uint16_t  transmitDuration;   // Previous transmission duration (2 bytes)
     uint16_t  messageCounter;     // Message counter                (2 bytes)
   } __attribute__((packed));                                        // Total: 39 bytes
-  uint8_t bytes[300]; // To do: Look into flexible arrays in structures
+  uint8_t bytes[37]; // To do: Look into flexible arrays in structures
 } SBDMESSAGE;
 
 SBDMESSAGE message;
