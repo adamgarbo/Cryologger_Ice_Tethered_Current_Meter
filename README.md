@@ -1,7 +1,7 @@
 # Cryologger - Ice-Tethered Current Meter
 
-# Introduction
+## Introduction
 
-# Design
+## Design
 
-# 
+##
