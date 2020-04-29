@@ -1,6 +1,6 @@
 /*
   Title:    Cryologger - Ice-Tethered Current Meter
-  Date:     April 6, 2020
+  Date:     April 29, 2020
   Author:   Adam Garbo
 
   Description:
@@ -17,7 +17,7 @@
   - Adafruit Lithium Ion Battery Pack - 3.7V 6600mAh
 
   Comments:
-  - Code is ready for testing once IMU functionality is added.
+  - Code is ready for testing.
 */
 
 // Libraries
@@ -86,6 +86,8 @@ byte          transmitBuffer[340]     = {};     // RockBLOCK 9603 transmission b
 unsigned int  messageCounter          = 0;      // RockBLOCK 9603 transmitted message counter
 unsigned int  retransmitCounter       = 0;      // RockBLOCK 9603 failed data transmission counter
 unsigned int  transmitCounter         = 0;      // RockBLOCK 9603 transmission interval counter
+int           errorValue              = 5;      // Gyroscope dps error threshold
+int           warningValue            = 2;      // Gyroscope dps warning threshold
 unsigned long previousMillis          = 0;      // Global millis() timer variable
 unsigned long unixtime                = 0;      // UNIX Epoch time variable
 unsigned long alarmTime               = 0;      // Epoch alarm time variable
@@ -131,7 +133,11 @@ typedef union {
 SBDMESSAGE message;
 size_t messageSize = sizeof(message); // Size (in bytes) of data message to be transmitted
 
+//*****************************************************************************
+//
 // Setup
+//
+//*****************************************************************************
 void setup() {
 
   // Pin assignments
@@ -205,7 +211,7 @@ void setup() {
   readGps();                        // Set the RTC's date and time from GPS
   rtc.setAlarmTime(0, 0, 0);        // Set alarm
 #if DEBUG
-  rtc.enableAlarm(rtc.MATCH_SS);  // Set alarm to seconds match
+  rtc.enableAlarm(rtc.MATCH_SS);    // Set alarm to seconds match
   //rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match
 #else if DEPLOY
   rtc.enableAlarm(rtc.MATCH_MMSS);  // Set alarm to seconds and minutes match
@@ -230,7 +236,11 @@ void setup() {
   blinkLed(10, 100);
 }
 
+//*****************************************************************************
+//
 // Loop
+//
+//*****************************************************************************
 void loop() {
 
   // Check if alarm interrupt service routine was triggered
@@ -253,7 +263,7 @@ void loop() {
       petDog(); // Pet the Watchdog Timer
       readImu(); // Read IMU
 #if DEBUG
-      blinkLed(1, 100);
+      blinkLed(1, 1000);
 #else if DEPLOY
       // Go to sleep to reduce power consumption
       // To do: Investigate why the sleep duration appears to be double
@@ -309,7 +319,11 @@ void loop() {
 #endif
 }
 
+//*****************************************************************************
+//
 // Measure battery voltage from 100/100 kOhm voltage divider
+//
+//*****************************************************************************
 void readBattery() {
 
   // Start loop timer
@@ -331,10 +345,16 @@ void readBattery() {
 
   // Stop loop timer
   unsigned long loopEndTime = millis() - loopStartTime;
+#if DEBUG
   //Serial.print("readBattery() function execution: "); Serial.print(loopEndTime); Serial.println(F(" ms"));
+#endif
 }
 
-// Read RTC
+//*****************************************************************************
+//
+// Read real-time clock
+//
+//*****************************************************************************
 void readRtc() {
 
   // Start loop timer
@@ -347,9 +367,12 @@ void readRtc() {
   message.unixtime = unixtime;
   Serial.print(F("Epoch time: ")); Serial.println(unixtime);
 
+
   // Stop loop timer
   unsigned long loopEndTime = micros() - loopStartTime;
+#if DEBUG
   Serial.print(F("readRtc() function execution: ")); Serial.print(loopEndTime); Serial.println(F(" μs"));
+#endif
 }
 
 // RTC alarm interrupt service routine
@@ -366,7 +389,11 @@ void printDateTime() {
   Serial.println(datetimeBuffer);
 }
 
+//*****************************************************************************
+//
 // Print RTC alarm
+//
+//*****************************************************************************
 void printAlarm() {
   char alarmBuffer[20];
   snprintf(alarmBuffer, sizeof(alarmBuffer), "%04u-%02d-%02dT%02d:%02d:%02d",
@@ -375,7 +402,11 @@ void printAlarm() {
   Serial.println(alarmBuffer);
 }
 
+//*****************************************************************************
+//
 // Read IMU
+//
+//*****************************************************************************
 void readImu() {
 
   // Start loop timer
@@ -396,19 +427,23 @@ void readImu() {
   gyStats.add(gEvent.gyro.y);
   gzStats.add(gEvent.gyro.z);
 
-  // Write data to union
-  message.gyroFlag = 0b01100101; // Just an example
-
   // Place accelerometer and gyroscope in low-power (standby) mode
   accelmag.standby(1);
   gyro.standby(1);
 
+
   // Stop loop timer
   unsigned long loopEndTime = micros() - loopStartTime;
+#if DEBUG
   Serial.print(F("readImu() executed in: ")); Serial.print(loopEndTime); Serial.println(F(" μs"));
+#endif
 }
 
+//*****************************************************************************
+//
 // Read GPS
+//
+//*****************************************************************************
 void readGps() {
 
   // Start loop timer
@@ -486,13 +521,18 @@ void readGps() {
 
   // Stop loop timer
   unsigned long loopEndTime = millis() - loopStartTime;
+#if DEBUG
   Serial.print(F("readGps() function execution: ")); Serial.print(loopEndTime); Serial.println(F(" ms"));
-
+#endif
   // Disable GPS
   digitalWrite(GPS_EN_PIN, HIGH);
 }
 
+//*****************************************************************************
+//
 // Calculate statistics and clear objects
+//
+//*****************************************************************************
 void calculateStatistics() {
 
   // Write data to union
@@ -516,6 +556,52 @@ void calculateStatistics() {
   //message.gyStdev = gyStats.pop_stdev() * 100;
   //message.gzStdev = gzStats.pop_stdev() * 100;
 
+  // Gyro measurement standard deviations
+  int gxStdev, gyStdev, gzStdev;
+  gxStdev = gxStats.pop_stdev() * 180 / PI;
+  gyStdev = gyStats.pop_stdev() * 180 / PI;
+  gzStdev = gzStats.pop_stdev() * 180 / PI;
+
+  // Bitfield
+  bool gyroBitfield[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  if (abs(gxStdev) > warningValue) {
+    gyroBitfield[7] = 1;
+  }
+  if (abs(gyStdev) > warningValue) {
+    gyroBitfield[6] = 1;
+  }
+  if (abs(gzStdev) > warningValue) {
+    gyroBitfield[5] = 1;
+  }
+  if (abs(gxStdev) > errorValue) {
+    gyroBitfield[4] = 1;
+  }
+  if (abs(gyStdev) > errorValue) {
+    gyroBitfield[3] = 1;
+  }
+  if (abs(gzStdev) > errorValue) {
+    gyroBitfield[2] = 1;
+  }
+
+  /*
+    // Extra bits available
+    if (abs(gxStdev) > errorValue) {
+      bit_gy[1] = 1;
+    }
+    if (abs(gxStdev) > errorValue) {
+      bit_gy[0] = 1;
+    }
+  */
+  byte gyroFlag = 0; // Clear all bits
+
+  // Write bits to flag
+  for (int i = 0; i < 8; i++) {
+    gyroFlag |= gyroBitfield[i] << i;
+  }
+
+  // Write data to union
+  message.gyroFlag = gyroFlag;
+
   // Clear statistics objects
   axStats.clear();
   ayStats.clear();
@@ -529,7 +615,11 @@ void calculateStatistics() {
   batteryStats.clear();
 }
 
+//*****************************************************************************
+//
 // Write union data to transmit buffer in preparation of data transmission
+//
+//*****************************************************************************
 void writeBuffer() {
   messageCounter++;                         // Increment message counter
   message.messageCounter = messageCounter;  // Write message counter data to union
@@ -546,7 +636,11 @@ void writeBuffer() {
 #endif
 }
 
+//*****************************************************************************
+//
 // Transmit data via the RockBLOCK 9603 transceiver
+//
+//*****************************************************************************
 void transmitData() {
 
   // Start loop timer
@@ -680,7 +774,11 @@ void transmitData() {
   }
 }
 
-// Blink LED
+//*****************************************************************************
+//
+// Non-blocking LED blink
+//
+//*****************************************************************************
 void blinkLed(byte flashes, unsigned long interval) {
   byte i = 0;
   while (i == flashes) {
@@ -700,7 +798,11 @@ void blinkLed(byte flashes, unsigned long interval) {
   digitalWrite(LED_BUILTIN, LOW);
 }
 
+//*****************************************************************************
+//
 // Blink LED
+//
+//*****************************************************************************
 void blinkLED() {
   digitalWrite(LED_BUILTIN, (millis() / 1000) % 2 == 1 ? HIGH : LOW);
 }
@@ -727,7 +829,11 @@ void ISBDDiagsCallback(IridiumSBD * device, char c) {
 #endif
 }
 
+//*****************************************************************************
+//
 // Print statistics
+//
+//*****************************************************************************
 void printStatistics() {
   Serial.println(F("-------------------------------------------------------------------------"));
   Serial.println(F("Statistics"));
@@ -792,10 +898,13 @@ void printStatistics() {
   Serial.print(F("\tMax: ")); Serial.print(gzStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(gzStats.average());
   Serial.print(F("\tSD: ")); Serial.println(gzStats.unbiased_stdev());
-
 }
 
+//*****************************************************************************
+//
 // Print union/structure
+//
+//*****************************************************************************
 void printUnion() {
   Serial.println(F("-----------------------------------"));
   Serial.println(F("Union/structure"));
@@ -825,7 +934,11 @@ void printUnion() {
   Serial.println(F("-----------------------------------"));
 }
 
+//*****************************************************************************
+//
 // Print contents of union/structure
+//
+//*****************************************************************************
 void printUnionBinary() {
   Serial.println(F("Union/structure "));
   Serial.println(F("-----------------------------------"));
@@ -840,7 +953,11 @@ void printUnionBinary() {
   Serial.println(F("-----------------------------------"));
 }
 
+//*****************************************************************************
+//
 // Print contents of transmiff buffer array
+//
+//*****************************************************************************
 void printTransmitBuffer() {
   Serial.println(F("Transmit buffer"));
   Serial.println(F("-----------------------------------"));
@@ -854,7 +971,12 @@ void printTransmitBuffer() {
   }
 }
 
-// Configure the WDT to perform a system reset if loop() blocks for more than 8-16 seconds
+//*****************************************************************************
+//
+// Configure Watchdog Timer to perform a system reset if loop() blocks for more
+// than 8-16 seconds
+//
+//*****************************************************************************
 void configureWatchdog() {
 
   // Set up the generic clock (GCLK2) used to clock the watchdog timer at 1.024kHz
@@ -888,14 +1010,22 @@ void configureWatchdog() {
   NVIC_EnableIRQ(WDT_IRQn);
 }
 
+//*****************************************************************************
+//
 // Pet the Watchdog Timer
+//
+//*****************************************************************************
 void petDog() {
   watchdogCounter = 0;              // Clear Watchdog Timer trigger counter
   WDT->CLEAR.bit.CLEAR = 0xA5;      // Clear the Watchdog Timer and restart time-out period //REG_WDT_CLEAR = WDT_CLEAR_CLEAR_KEY;
   while (WDT->STATUS.bit.SYNCBUSY); // Await synchronization of registers between clock domains
 }
 
+//*****************************************************************************
+//
 // Watchdog Timer interrupt service routine
+//
+//*****************************************************************************
 void WDT_Handler() {
   // Permit a limited number of Watchdog Timer triggers before forcing system reset.
   if (watchdogCounter < 10) {
