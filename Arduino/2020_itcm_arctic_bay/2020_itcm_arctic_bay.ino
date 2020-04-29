@@ -110,7 +110,6 @@ Statistic gzStats;
 typedef union {
   struct {
     uint32_t  unixtime;           // Unix epoch time                (4 bytes)
-    //int16_t   temperature;        // Temperature                    (2 bytes)
     int16_t   axMean;             // Accelerometer x                (2 bytes)
     int16_t   ayMean;             // Accelerometer y                (2 bytes)
     int16_t   azMean;             // Accelerometer z                (2 bytes)
@@ -120,14 +119,14 @@ typedef union {
     int16_t   mxMean;             // Magnetometer x                 (2 bytes)
     int16_t   myMean;             // Magnetometer y                 (2 bytes)
     int16_t   mzMean;             // Magnetometer z                 (2 bytes)
-    int8_t    gyroFlag;           // Gyroscope flag                 (1 byte)
+    uint8_t   gyroFlag;           // Gyroscope flag                 (1 byte)
     int32_t   latitude;           // Latitude                       (4 bytes)
     int32_t   longitude;          // Longitude                      (4 bytes)
     uint16_t  voltage;            // Battery voltage (mV)           (2 bytes)
     uint16_t  transmitDuration;   // Previous transmission duration (2 bytes)
     uint16_t  messageCounter;     // Message counter                (2 bytes)
-  } __attribute__((packed));                                        // Total: 39 bytes
-  uint8_t bytes[37]; // To do: Look into flexible arrays in structures
+  } __attribute__((packed));                                        // Total: 37 bytes
+  uint8_t bytes[37];
 } SBDMESSAGE;
 
 SBDMESSAGE message;
@@ -263,7 +262,7 @@ void loop() {
       petDog(); // Pet the Watchdog Timer
       readImu(); // Read IMU
 #if DEBUG
-      blinkLed(1, 1000);
+      blinkLed(1, 500);
 #else if DEPLOY
       // Go to sleep to reduce power consumption
       // To do: Investigate why the sleep duration appears to be double
@@ -780,7 +779,7 @@ void transmitData() {
 //*****************************************************************************
 void blinkLed(byte flashes, unsigned long interval) {
   byte i = 0;
-  while (i == flashes) {
+  while (i <= flashes) {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
       previousMillis = currentMillis;
@@ -909,10 +908,6 @@ void printUnion() {
   Serial.println(F("Union/structure"));
   Serial.println(F("-----------------------------------"));
   Serial.print(F("unixtime:\t\t")); Serial.println(message.unixtime);
-  //Serial.print(F("temperature:\t\t")); Serial.println(message.temperature);
-  //Serial.print(F("pitch:\t\t\t")); Serial.println(message.pitch);
-  //Serial.print(F("roll:\t\t\t")); Serial.println(message.roll);
-  //Serial.print(F("heading:\t\t")); Serial.println(message.heading);
   Serial.print(F("axMean:\t\t\t")); Serial.println(message.axMean);
   Serial.print(F("ayMean:\t\t\t")); Serial.println(message.ayMean);
   Serial.print(F("azMean:\t\t\t")); Serial.println(message.azMean);
@@ -925,8 +920,6 @@ void printUnion() {
   Serial.print(F("gyroFlag:\t\t")); Serial.println(message.gyroFlag);
   Serial.print(F("latitude:\t\t")); Serial.println(message.latitude);
   Serial.print(F("longitude:\t\t")); Serial.println(message.longitude);
-  //Serial.print(F("satellites:\t\t")); Serial.println(message.satellites);
-  //Serial.print(F("hdop:\t\t\t")); Serial.println(message.hdop);
   Serial.print(F("voltage:\t\t")); Serial.println(message.voltage);
   Serial.print(F("transmitDuration:\t")); Serial.println(message.transmitDuration);
   Serial.print(F("messageCounter:\t\t")); Serial.println(message.messageCounter);
