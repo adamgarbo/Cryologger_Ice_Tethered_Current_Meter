@@ -431,7 +431,6 @@ void readImu() {
   accelmag.standby(1);
   gyro.standby(1);
 
-
   // Stop loop timer
   unsigned long loopEndTime = micros() - loopStartTime;
 #if DEBUG
