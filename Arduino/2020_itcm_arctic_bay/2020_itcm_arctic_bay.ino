@@ -768,12 +768,13 @@ void transmitData() {
 
   // Stop loop timer
   unsigned long loopEndTime = millis() - loopStartTime;
+#if DEBUG
   Serial.print(F("transmitData() function execution: ")); Serial.print(loopEndTime); Serial.println(F(" ms"));
+  Serial.print(F("retransmitCounter: ")); Serial.println(retransmitCounter);
+#endif
 
   // Write data to union
   message.transmitDuration = loopEndTime / 1000;
-
-  Serial.print(F("retransmitCounter: ")); Serial.println(retransmitCounter);
 
   // Check if reset flag was transmitted
   if (resetFlag == 255) {
@@ -788,7 +789,7 @@ void transmitData() {
 //*****************************************************************************
 void blinkLed(byte flashes, unsigned long interval) {
   byte i = 0;
-  while (i == flashes) {
+  while (i <= flashes) {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
       previousMillis = currentMillis;
