@@ -110,7 +110,6 @@ Statistic gzStats;
 typedef union {
   struct {
     uint32_t  unixtime;           // Unix epoch time                (4 bytes)
-    //int16_t   temperature;        // Temperature                    (2 bytes)
     int16_t   axMean;             // Accelerometer x                (2 bytes)
     int16_t   ayMean;             // Accelerometer y                (2 bytes)
     int16_t   azMean;             // Accelerometer z                (2 bytes)
@@ -126,7 +125,7 @@ typedef union {
     uint16_t  voltage;            // Battery voltage (mV)           (2 bytes)
     uint16_t  transmitDuration;   // Previous transmission duration (2 bytes)
     uint16_t  messageCounter;     // Message counter                (2 bytes)
-  } __attribute__((packed));                                        // Total: 39 bytes
+  } __attribute__((packed));                                        // Total: 37 bytes
   uint8_t bytes[37]; // To do: Look into flexible arrays in structures
 } SBDMESSAGE;
 
@@ -156,7 +155,7 @@ void setup() {
   configureWatchdog();
 
   Serial.println(F("---------------------------------------"));
-  Serial.println(F("Cryologger - Ice Tethered Current Meter"));
+  Serial.println(F("Cryologger - Ice-Tethered Current Meter"));
   Serial.println(F("---------------------------------------"));
 
   // I2C Configuration
