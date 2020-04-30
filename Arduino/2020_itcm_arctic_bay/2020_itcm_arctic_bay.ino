@@ -1,6 +1,6 @@
 /*
   Title:    Cryologger - Ice-Tethered Current Meter
-  Date:     April 29, 2020
+  Date:     April 30, 2020
   Author:   Adam Garbo
 
   Description:
@@ -171,7 +171,7 @@ void setup() {
   }
   else {
     Serial.println("Warning: FXOS8700 not detected. Please check wiring.");
-    while (1);
+    //while (1);
   }
 
   if (gyro.begin()) {
@@ -179,7 +179,7 @@ void setup() {
   }
   else {
     Serial.println("Warning: FXAS21002C not detected. Please check wiring.");
-    while (1);
+    //while (1);
   }
 
   // RockBLOCK 9603 Configuration
@@ -526,13 +526,14 @@ void readGps() {
   }
   Serial.println(charsSeen ? fixFound ? F("A GPS fix was found!") : F("No GPS fix was found.") : F("Wiring error: No GPS data seen."));
 
+  // Disable GPS
+  digitalWrite(GPS_EN_PIN, HIGH);
+
   // Stop loop timer
   unsigned long loopEndTime = millis() - loopStartTime;
 #if DEBUG
   Serial.print(F("readGps() function execution: ")); Serial.print(loopEndTime); Serial.println(F(" ms"));
 #endif
-  // Disable GPS
-  digitalWrite(GPS_EN_PIN, HIGH);
 }
 
 //*****************************************************************************
@@ -818,7 +819,7 @@ void blinkLED() {
 // RockBLOCK callback function
 bool ISBDCallback() {
   petDog(); // Pet the Watchdog
-  //readBattery();
+  readBattery();
   blinkLED();
   return true;
 }
