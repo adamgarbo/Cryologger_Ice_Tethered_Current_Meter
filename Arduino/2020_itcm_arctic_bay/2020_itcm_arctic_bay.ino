@@ -1,12 +1,12 @@
 /*
   Title:    Cryologger - Ice-Tethered Current Meter
-  Date:     April 30, 2020
+  Date:     May 1, 2020
   Author:   Adam Garbo
 
   Description:
   - An ice tethered current meter intended for deployment in Arctic Bay, Nunavut.
-  - Current measurements are conducted every 30 minutes for 2 minutes at 1-second intervals.
-  - Data is transmitted via the Iridium satellite network every 4 hours.
+  - Current measurements are recorded every 30 minutes for 2 minutes at 1-second intervals.
+  - Data is transmitted via the Iridium satellite network every 8 hours.
 
   Components:
   - Adafruit Feather M0 Proto
@@ -47,7 +47,7 @@
 #define DEBUG         true    // Output debug messages to Serial Monitor
 #define DEBUG_GPS     false   // Echo NMEA sentences to Serial Monitor
 #define DIAGNOSTICS   true    // Output Iridium diagnostic messages to Serial Monitor
-#define DEPLOY        false    // Disable debugging messages for deployment
+#define DEPLOY        false   // Disable debugging messages for deployment
 
 // Create a new Serial/UART instance, assigning it to pins 10 and 11
 // For more information see: https://www.arduino.cc/en/Tutorial/SamdSercom
@@ -72,7 +72,7 @@ unsigned long alarmInterval           = 1800;   // Alarm sleep duration (Default
 unsigned int  sampleInterval          = 120;    // Sampling duration of current tilt measurements (Default: 120 seconds)
 byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
 byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
-byte          maxRetransmitCounter    = 1;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
+byte          maxRetransmitCounter    = 2;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
 byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
 // Global variable and constant declarations
@@ -119,14 +119,14 @@ typedef union {
     int16_t   mxMean;             // Magnetometer x                 (2 bytes)
     int16_t   myMean;             // Magnetometer y                 (2 bytes)
     int16_t   mzMean;             // Magnetometer z                 (2 bytes)
-    int8_t    gyroFlag;           // Gyroscope flag                 (1 byte)
+    uint8_t   gyroFlag;           // Gyroscope flag                 (1 byte)
     int32_t   latitude;           // Latitude                       (4 bytes)
     int32_t   longitude;          // Longitude                      (4 bytes)
     uint16_t  voltage;            // Battery voltage (mV)           (2 bytes)
     uint16_t  transmitDuration;   // Previous transmission duration (2 bytes)
     uint16_t  messageCounter;     // Message counter                (2 bytes)
   } __attribute__((packed));                                        // Total: 37 bytes
-  uint8_t bytes[37]; // To do: Look into flexible arrays in structures
+  uint8_t bytes[37];
 } SBDMESSAGE;
 
 SBDMESSAGE message;
@@ -171,7 +171,6 @@ void setup() {
   }
   else {
     Serial.println("Warning: FXOS8700 not detected. Please check wiring.");
-    //while (1);
   }
 
   if (gyro.begin()) {
@@ -179,7 +178,6 @@ void setup() {
   }
   else {
     Serial.println("Warning: FXAS21002C not detected. Please check wiring.");
-    //while (1);
   }
 
   // RockBLOCK 9603 Configuration
@@ -232,7 +230,7 @@ void setup() {
   Serial.print(F("Datetime: ")); printDateTime();
 
   // Blink LED to indicate setup has completed
-  blinkLed(10, 100);
+  blinkLed(20, 100);
 }
 
 //*****************************************************************************
@@ -266,7 +264,7 @@ void loop() {
 #else if DEPLOY
       // Go to sleep to reduce power consumption
       // To do: Investigate why the sleep duration appears to be double
-      // (e.g. 1000 ms sleep = 2000 ms on the oscilloscope)
+      // (e.g. 1000 ms sleep = 1500 ms on the oscilloscope)
       LowPower.sleep(500);
 #endif
     }
@@ -329,12 +327,7 @@ void readBattery() {
   unsigned long loopStartTime = millis();
   float voltage = 0.0;
 
-  // Average measurements
-  for (int i = 0; i < 10; ++i) {
-    voltage += analogRead(VBAT_PIN);
-    delay(1);
-  }
-  voltage /= 10;    // Average measurements
+  voltage = analogRead(VBAT_PIN); // Read voltage
   voltage *= 2;     // Divided by 2, so multiply back
   voltage *= 3.3;   // Multiply by 3.3V reference voltage
   voltage /= 4096;  // Convert to voltage
@@ -417,7 +410,11 @@ void printAlarm() {
 void readImu() {
 
   // Start loop timer
-  unsigned long loopStartTime = micros();
+  unsigned long loopStartTime = millis();
+
+  // Bring accelerometer and gyroscope out of low-power (standby) mode
+  accelmag.standby(0);
+  gyro.standby(0);
 
   // Get a new sensor event
   accelmag.getEvent(&aEvent, &mEvent);  // Measured in m/s^2 and uTesla
@@ -438,11 +435,10 @@ void readImu() {
   accelmag.standby(1);
   gyro.standby(1);
 
-
   // Stop loop timer
-  unsigned long loopEndTime = micros() - loopStartTime;
+  unsigned long loopEndTime = millis() - loopStartTime;
 #if DEBUG
-  Serial.print(F("readImu() executed in: ")); Serial.print(loopEndTime); Serial.println(F(" μs"));
+  Serial.print(F("readImu() executed in: ")); Serial.print(loopEndTime); Serial.println(F(" ms"));
 #endif
 }
 
@@ -475,8 +471,8 @@ void readGps() {
   //GpsSerial.println("$PGCMD,33,1*6C"); // Enable antenna updates
   GpsSerial.println("$PGCMD,33,0*6D"); // Disable antenna updates
 
-  // Look for GPS signal for up to 5 minutes
-  while (!fixFound && millis() - loopStartTime < 5UL * 60UL * 1000UL) {
+  // Look for GPS signal for up to 2 minutes
+  while (!fixFound && millis() - loopStartTime < 2UL * 60UL * 1000UL) {
     if (GpsSerial.available()) {
       charsSeen = true;
       char c = GpsSerial.read();
@@ -852,61 +848,61 @@ void printStatistics() {
   Serial.print(F("\tMin: "));   Serial.print(batteryStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(batteryStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(batteryStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(batteryStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(batteryStats.pop_stdev());
   Serial.println(F("ax:"));
   Serial.print(F("Samples: ")); Serial.print(axStats.count());
   Serial.print(F("\tMin: "));   Serial.print(axStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(axStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(axStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(axStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(axStats.pop_stdev());
   Serial.println(F("ay:"));
   Serial.print(F("Samples: ")); Serial.print(ayStats.count());
   Serial.print(F("\tMin: "));   Serial.print(ayStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(ayStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(ayStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(ayStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(ayStats.pop_stdev());
   Serial.println(F("az:"));
   Serial.print(F("Samples: ")); Serial.print(azStats.count());
   Serial.print(F("\tMin: "));   Serial.print(azStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(azStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(azStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(azStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(azStats.pop_stdev());
   Serial.println(F("mx:"));
   Serial.print(F("Samples: ")); Serial.print(mxStats.count());
   Serial.print(F("\tMin: "));   Serial.print(mxStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(mxStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(mxStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(mxStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(mxStats.pop_stdev());
   Serial.println(F("my:"));
   Serial.print(F("Samples: ")); Serial.print(myStats.count());
   Serial.print(F("\tMin: "));   Serial.print(myStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(myStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(myStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(myStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(myStats.pop_stdev());
   Serial.println(F("mz:"));
   Serial.print(F("Samples: ")); Serial.print(mzStats.count());
   Serial.print(F("\tMin: "));   Serial.print(mzStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(mzStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(mzStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(mzStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(mzStats.pop_stdev());
   Serial.println(F("gx:"));
   Serial.print(F("Samples: ")); Serial.print(gxStats.count());
   Serial.print(F("\tMin: "));   Serial.print(gxStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(gxStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(gxStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(gxStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(gxStats.pop_stdev());
   Serial.println(F("gy:"));
   Serial.print(F("Samples: ")); Serial.print(gyStats.count());
   Serial.print(F("\tMin: "));   Serial.print(gyStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(gyStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(gyStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(gyStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(gyStats.pop_stdev());
   Serial.println(F("gz:"));
   Serial.print(F("Samples: ")); Serial.print(gzStats.count());
   Serial.print(F("\tMin: "));   Serial.print(gzStats.minimum());
   Serial.print(F("\tMax: ")); Serial.print(gzStats.maximum());
   Serial.print(F("\tMean: ")); Serial.print(gzStats.average());
-  Serial.print(F("\tSD: ")); Serial.println(gzStats.unbiased_stdev());
+  Serial.print(F("\tSD: ")); Serial.println(gzStats.pop_stdev());
 }
 
 //*****************************************************************************
@@ -919,10 +915,6 @@ void printUnion() {
   Serial.println(F("Union/structure"));
   Serial.println(F("-----------------------------------"));
   Serial.print(F("unixtime:\t\t")); Serial.println(message.unixtime);
-  //Serial.print(F("temperature:\t\t")); Serial.println(message.temperature);
-  //Serial.print(F("pitch:\t\t\t")); Serial.println(message.pitch);
-  //Serial.print(F("roll:\t\t\t")); Serial.println(message.roll);
-  //Serial.print(F("heading:\t\t")); Serial.println(message.heading);
   Serial.print(F("axMean:\t\t\t")); Serial.println(message.axMean);
   Serial.print(F("ayMean:\t\t\t")); Serial.println(message.ayMean);
   Serial.print(F("azMean:\t\t\t")); Serial.println(message.azMean);
@@ -935,8 +927,6 @@ void printUnion() {
   Serial.print(F("gyroFlag:\t\t")); Serial.println(message.gyroFlag);
   Serial.print(F("latitude:\t\t")); Serial.println(message.latitude);
   Serial.print(F("longitude:\t\t")); Serial.println(message.longitude);
-  //Serial.print(F("satellites:\t\t")); Serial.println(message.satellites);
-  //Serial.print(F("hdop:\t\t\t")); Serial.println(message.hdop);
   Serial.print(F("voltage:\t\t")); Serial.println(message.voltage);
   Serial.print(F("transmitDuration:\t")); Serial.println(message.transmitDuration);
   Serial.print(F("messageCounter:\t\t")); Serial.println(message.messageCounter);
