@@ -1,6 +1,6 @@
 /*
   Title:    Cryologger - Ice-Tethered Current Meter
-  Date:     May 1, 2020
+  Date:     May 2, 2020
   Author:   Adam Garbo
 
   Description:
