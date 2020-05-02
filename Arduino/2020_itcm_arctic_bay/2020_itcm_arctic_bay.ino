@@ -45,10 +45,10 @@
 #define VBAT_PIN              A7  // Battery voltage measurement pin
 
 // Debugging constants
-#define DEBUG         true    // Output debug messages to Serial Monitor
+#define DEBUG         false   // Output debug messages to Serial Monitor
 #define DEBUG_GPS     false   // Echo NMEA sentences to Serial Monitor
-#define DIAGNOSTICS   true    // Output Iridium diagnostic messages to Serial Monitor
-#define DEPLOY        false   // Disable debugging messages for deployment
+#define DIAGNOSTICS   false   // Output Iridium diagnostic messages to Serial Monitor
+#define DEPLOY        true    // Disable debugging messages for deployment
 
 // Create a new Serial/UART instance, assigning it to pins 10 and 11
 // For more information see: https://www.arduino.cc/en/Tutorial/SamdSercom
@@ -69,10 +69,10 @@ IridiumSBD          modem(IridiumSerial, ROCKBLOCK_SLEEP_PIN);
 TinyGPSPlus         gps;
 
 // User defined global variable declarations
-unsigned long alarmInterval           = 300;   // Alarm sleep duration (Default: 1800 seconds)
+unsigned long alarmInterval           = 1800;   // Alarm sleep duration (Default: 1800 seconds)
 unsigned int  sampleInterval          = 120;    // Sampling duration of current tilt measurements (Default: 120 seconds)
 byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
-byte          transmitInterval        = 1;      // Number of messages sent in each Iridium transmission (340-byte limit)
+byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
 byte          maxRetransmitCounter    = 2;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
 byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
