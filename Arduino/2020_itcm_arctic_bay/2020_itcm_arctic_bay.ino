@@ -17,7 +17,8 @@
   - Adafruit Lithium Ion Battery Pack - 3.7V 6600mAh
 
   Comments:
-  - Code is ready for testing.
+  - Code is ready for testing. 
+  - Currently set to transmit every 5 minutes. 
 */
 
 // Libraries
@@ -68,10 +69,10 @@ IridiumSBD          modem(IridiumSerial, ROCKBLOCK_SLEEP_PIN);
 TinyGPSPlus         gps;
 
 // User defined global variable declarations
-unsigned long alarmInterval           = 1800;   // Alarm sleep duration (Default: 1800 seconds)
+unsigned long alarmInterval           = 300;   // Alarm sleep duration (Default: 1800 seconds)
 unsigned int  sampleInterval          = 120;    // Sampling duration of current tilt measurements (Default: 120 seconds)
 byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
-byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
+byte          transmitInterval        = 1;      // Number of messages sent in each Iridium transmission (340-byte limit)
 byte          maxRetransmitCounter    = 2;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
 byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
@@ -786,7 +787,7 @@ void transmitData() {
 //*****************************************************************************
 void blinkLed(byte flashes, unsigned long interval) {
   byte i = 0;
-  while (i <= flashes) {
+  while (i < flashes * 2) {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis >= interval) {
       previousMillis = currentMillis;
