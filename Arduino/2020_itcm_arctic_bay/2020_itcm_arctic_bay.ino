@@ -1,6 +1,6 @@
 /*
   Title:    Cryologger - Ice-Tethered Current Meter
-  Date:     May 2, 2020
+  Date:     May 10, 2020
   Author:   Adam Garbo
 
   Description:
@@ -17,8 +17,7 @@
   - Adafruit Lithium Ion Battery Pack - 3.7V 6600mAh
 
   Comments:
-  - Code is ready for testing. 
-  - Currently set to transmit every 5 minutes. 
+  - Ready for deployment.
 */
 
 // Libraries
@@ -71,9 +70,9 @@ TinyGPSPlus         gps;
 // User defined global variable declarations
 unsigned long alarmInterval           = 1800;   // Alarm sleep duration (Default: 1800 seconds)
 unsigned int  sampleInterval          = 120;    // Sampling duration of current tilt measurements (Default: 120 seconds)
-byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
+//byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
 byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
-byte          maxRetransmitCounter    = 2;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
+byte          maxRetransmitCounter    = 3;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
 byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
 // Global variable and constant declarations
@@ -184,8 +183,8 @@ void setup() {
   // RockBLOCK 9603 Configuration
   if (modem.isConnected()) {
     modem.setPowerProfile(IridiumSBD::DEFAULT_POWER_PROFILE); // Assume battery power
-    modem.adjustSendReceiveTimeout(120); // Default = 300 seconds
-    modem.adjustATTimeout(20);
+    modem.adjustSendReceiveTimeout(180); // Default = 300 seconds
+    modem.adjustATTimeout(30);
     Serial.println(F("RockBLOCK 9603 intialized."));
   }
   else {
@@ -635,9 +634,9 @@ void writeBuffer() {
          message.bytes, sizeof(message)); // Copy message to transmit buffer
 
 #if DEBUG
-  printUnion();
-  //printUnionBinary(); // Print union/structure in hex/binary
-  //printTransmitBuffer();  // Print transmit buffer in hex/binary
+  printUnion();           // Print contents of union/structure
+  printUnionBinary();     // Print union/structure in hex/binary
+  printTransmitBuffer();  // Print transmit buffer in hex/binary
 #endif
 }
 
@@ -702,20 +701,23 @@ void transmitData() {
         }
 
         // Recompose bits using bitshift
-        uint8_t resetFlagBuffer             = (((uint8_t)inBuffer[8] << 0) & 0xFF);
-        uint16_t maxRetransmitCounterBuffer = (((uint16_t)inBuffer[7] << 0) & 0xFF) +  (((uint16_t)inBuffer[6] << 8) & 0xFFFF);
-        uint16_t transmitIntervalBuffer     = (((uint16_t)inBuffer[5] << 0) & 0xFF) + (((uint16_t)inBuffer[4] << 8) & 0xFFFF);
+        uint8_t resetFlagBuffer             = (((uint8_t)inBuffer[10] << 0) & 0xFF);
+        uint16_t maxRetransmitCounterBuffer = (((uint16_t)inBuffer[9] << 0) & 0xFF) +  (((uint16_t)inBuffer[8] << 8) & 0xFFFF);
+        uint16_t transmitIntervalBuffer     = (((uint16_t)inBuffer[7] << 0) & 0xFF) + (((uint16_t)inBuffer[6] << 8) & 0xFFFF);
+        uint16_t sampleIntervalBuffer       = (((uint16_t)inBuffer[5] << 0) & 0xFF) + (((uint16_t)inBuffer[4] << 8) & 0xFFFF);
         uint32_t alarmIntervalBuffer        = (((uint32_t)inBuffer[3] << 0) & 0xFF) + (((uint32_t)inBuffer[2] << 8) & 0xFFFF) +
                                               (((uint32_t)inBuffer[1] << 16) & 0xFFFFFF) + (((uint32_t)inBuffer[0] << 24) & 0xFFFFFFFF);
 
         // Check if incoming data is valid
         if ((alarmIntervalBuffer >= 300 && alarmIntervalBuffer <= 1209600) &&
+            (sampleIntervalBuffer >= 1 && sampleIntervalBuffer <= 3600) &&
             (transmitIntervalBuffer >= 1 && transmitIntervalBuffer <= 24) &&
             (maxRetransmitCounterBuffer >= 0 && maxRetransmitCounterBuffer <= 24) &&
             (resetFlagBuffer == 0  || resetFlagBuffer == 255)) {
 
           // Update global variables
           alarmInterval = alarmIntervalBuffer;                // Update alarm interval
+          sampleInterval = sampleIntervalBuffer;              // Update sampling interval
           transmitInterval = transmitIntervalBuffer;          // Update transmit interval
           maxRetransmitCounter = maxRetransmitCounterBuffer;  // Update max retransmit counter
           resetFlag = resetFlagBuffer;                        // Update force reset flag
@@ -816,7 +818,7 @@ void blinkLED() {
 // RockBLOCK callback function
 bool ISBDCallback() {
   petDog(); // Pet the Watchdog
-  readBattery();
+  //readBattery();
   blinkLED();
   return true;
 }
