@@ -158,6 +158,14 @@ void setup() {
   Serial.println(F("Cryologger - Ice-Tethered Current Meter"));
   Serial.println(F("---------------------------------------"));
 
+  // Print operating mode
+  Serial.print(F("Mode: "));
+#if DEBUG
+  Serial.println(F("DEBUG"));
+#else if DEPLOY
+  Serial.println(F("DEPLOY"));
+#endif
+
   // I2C Configuration
   Wire.begin();           // Initialize I2C bus
   Wire.setClock(100000);  // Set I2C clock speed to 100kHz
@@ -215,19 +223,11 @@ void setup() {
 #endif
   rtc.attachInterrupt(alarmMatch);  // Attach alarm interrupt
 
-  // Print RTC's alarm date and time
-  Serial.print(F("Next alarm: ")); printAlarm();
-
-  // Print operating mode
-  Serial.print(F("Mode: "));
-#if DEBUG
-  Serial.println(F("DEBUG"));
-#else if DEPLOY
-  Serial.println(F("DEPLOY"));
-#endif
-
   // Print current date and time
   Serial.print(F("Datetime: ")); printDateTime();
+
+  // Print RTC's alarm date and time
+  Serial.print(F("Next alarm: ")); printAlarm();
 
   // Blink LED to indicate setup has completed
   blinkLed(20, 100);
