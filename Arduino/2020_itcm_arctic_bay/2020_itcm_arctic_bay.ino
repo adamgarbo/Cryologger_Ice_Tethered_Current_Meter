@@ -6,7 +6,7 @@
   Description:
   - An ice tethered current meter intended for deployment in Arctic Bay, Nunavut.
   - Current measurements are recorded every 30 minutes for 2 minutes at 1-second intervals.
-  - Data is transmitted via the Iridium satellite network every 8 hours.
+  - Data is transmitted via the Iridium satellite network every 4 hours.
 
   Components:
   - Adafruit Feather M0 Proto
