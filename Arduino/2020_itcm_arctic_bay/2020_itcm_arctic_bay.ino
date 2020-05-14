@@ -68,11 +68,11 @@ IridiumSBD          modem(IridiumSerial, ROCKBLOCK_SLEEP_PIN);
 TinyGPSPlus         gps;
 
 // User defined global variable declarations
-unsigned long alarmInterval           = 1800;   // Alarm sleep duration (Default: 1800 seconds)
+unsigned long alarmInterval           = 3600;   // Alarm sleep duration (Default: 1800 seconds)
 unsigned int  sampleInterval          = 120;    // Sampling duration of current tilt measurements (Default: 120 seconds)
 //byte          sampleFrequency         = 1;      // Sampling frequency of current tilt measurements (Default: 1 second)
-byte          transmitInterval        = 2;      // Number of messages sent in each Iridium transmission (340-byte limit)
-byte          maxRetransmitCounter    = 3;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
+byte          transmitInterval        = 4;      // Number of messages sent in each Iridium transmission (340-byte limit)
+byte          maxRetransmitCounter    = 1;      // Number of failed messages to reattempt in each Iridium transmission (340-byte limit)
 byte          maxFixCounter           = 10;     // Minimum number of acquired GPS fixes
 
 // Global variable and constant declarations
