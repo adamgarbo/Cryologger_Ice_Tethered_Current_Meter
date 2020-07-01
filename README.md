@@ -10,7 +10,7 @@ Three different configurations of the Cryologger AWS were deployed in 2019.
 ## Arctic Bay, Nunavut
 * Data: https://cryologger.org/arctic-bay-2020/
 * Deployed: June 18, 2020
-* Coordinates: ? N,	-? W
+* Coordinates: 73.25 N, -85.30 W
 
 ### Recorded Measurements
 | Variable  | Unit | Comments |
