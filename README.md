@@ -5,7 +5,7 @@
 ## Design
 
 ## Deployments
-Three different configurations of the Cryologger AWS were deployed in 2019.
+The Cryologger ITCM was deployed in 2020.
 
 ## Arctic Bay, Nunavut
 * Data: https://cryologger.org/arctic-bay-2020/
