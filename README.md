@@ -33,7 +33,7 @@ The Cryologger ITCM was deployed in 2020.
 | Message counter |  | Number of transmitted messages |
 
 ## Repository Contents
-* **/Arduino**
+* **/Software** - Contains the Arduino code
 * **/Bill of Materials**
 * **/Images**
 
